@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* ─── Tema BoulderHub ─────────────────────────────────────────────────────── */
+
+@theme {
+  /* Fondos */
+  --color-bg-base: #1C1512;
+  --color-bg-surface: #2A211D;
+  --color-bg-elevated: #352B26;
+  --color-bg-hover: #3F342E;
+
+  /* Texto */
+  --color-text-primary: #F5F0EB;
+  --color-text-secondary: #B8A99E;
+  --color-text-muted: #8A7A6E;
+  --color-text-inverse: #1C1512;
+
+  /* Acentos */
+  --color-accent-primary: #E87D3E;
+  --color-accent-primary-hover: #D46D2E;
+  --color-accent-secondary: #4A9E6E;
+  --color-accent-secondary-hover: #3D8E5E;
+  --color-accent-tertiary: #D4A84B;
+
+  /* Estados */
+  --color-state-success: #4A9E6E;
+  --color-state-warning: #D4A84B;
+  --color-state-error: #D84C4C;
+  --color-state-info: #5B9BD5;
+
+  /* Bordes */
+  --color-border-subtle: #3A2F29;
+  --color-border-default: #4A3D35;
+  --color-border-strong: #5C4D43;
+}
+
+/* ─── Reset y base ────────────────────────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+a {
+  color: var(--color-accent-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-strong);
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
