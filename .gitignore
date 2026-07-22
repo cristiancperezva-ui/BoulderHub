@@ -9,6 +9,9 @@ lerna-debug.log*
 
 node_modules
 dist
+firebase-admin-key.json
+*.key.json
+dist
 dist-ssr
 *.local
 
