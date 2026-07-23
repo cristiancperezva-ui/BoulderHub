@@ -21,6 +21,7 @@ import { AdminMetricsView } from '@/views/admin/MetricsView';
 import { RouteSetterDashboardView } from '@/views/routesetter/DashboardView';
 import { RouteSetterCreateBlockView } from '@/views/routesetter/CreateBlockView';
 import { RouteSetterMyBlocksView } from '@/views/routesetter/MyBlocksView';
+import { RouteSetterChallengesView } from '@/views/routesetter/ChallengesView';
 import { RouteSetterProfileView } from '@/views/routesetter/ProfileView';
 
 // Climber views
@@ -34,7 +35,7 @@ import { ClimberCreateChallengeView } from '@/views/climber/CreateChallengeView'
 import { ClimberProfileView } from '@/views/climber/ProfileView';
 
 export default function App() {
-  const { role, loading } = useAuth();
+  const { roles, loading } = useAuth();
 
   if (loading) {
     return (
@@ -51,13 +52,10 @@ export default function App() {
   }
 
   const getDefaultRedirect = () => {
-    if (!role) return '/auth';
-    switch (role) {
-      case 'admin': return '/admin/dashboard';
-      case 'routesetter': return '/routesetter/dashboard';
-      case 'climber': return '/climber/dashboard';
-      default: return '/auth';
-    }
+    if (roles.length === 0) return '/auth';
+    if (roles.includes('admin')) return '/admin/dashboard';
+    if (roles.includes('routesetter')) return '/routesetter/dashboard';
+    return '/climber/dashboard';
   };
 
   return (
@@ -93,6 +91,7 @@ export default function App() {
         <Route path="/routesetter/dashboard" element={<RouteSetterDashboardView />} />
         <Route path="/routesetter/blocks/create" element={<RouteSetterCreateBlockView />} />
         <Route path="/routesetter/blocks" element={<RouteSetterMyBlocksView />} />
+        <Route path="/routesetter/challenges" element={<RouteSetterChallengesView />} />
         <Route path="/routesetter/profile" element={<RouteSetterProfileView />} />
       </Route>
 

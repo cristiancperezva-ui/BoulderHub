@@ -5,20 +5,18 @@ import { useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
 
 export function LoginView() {
-  const { signInWithGoogle, user, role, loading } = useAuth();
+  const { signInWithGoogle, user, roles, loading } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
-    if (user && role) {
-      switch (role) {
-        case 'admin': navigate('/admin/dashboard', { replace: true }); break;
-        case 'routesetter': navigate('/routesetter/dashboard', { replace: true }); break;
-        case 'climber': navigate('/climber/dashboard', { replace: true }); break;
-      }
+    if (user && roles.length > 0) {
+      if (roles.includes('admin')) navigate('/admin/dashboard', { replace: true });
+      else if (roles.includes('routesetter')) navigate('/routesetter/dashboard', { replace: true });
+      else navigate('/climber/dashboard', { replace: true });
     }
-  }, [user, role, navigate]);
+  }, [user, roles, navigate]);
 
   const handleSignIn = useCallback(async () => {
     setError(null);
@@ -31,17 +29,17 @@ export function LoginView() {
       const message = err?.message ?? '';
 
       if (code === 'auth/popup-closed-by-user' || message.includes('popup_closed_by_user')) {
-        setError('El popup se cerró antes de completar el inicio de sesión. Intenta de nuevo.');
+        setError('Cerraste el popup antes de completar el inicio de sesión. Intenta de nuevo.');
       } else if (code === 'auth/popup-blocked') {
-        setError('El navegador bloqueó el popup. Permite ventanas emergentes para este sitio o intenta de nuevo.');
+        setError('El navegador bloqueó el popup. Permite ventanas emergentes para este sitio.');
       } else if (code === 'auth/unauthorized-domain' || message.includes('unauthorized-domain')) {
-        setError('El dominio no está autorizado en Firebase Auth. Revisa la configuración en la consola de Firebase.');
+        setError('El dominio no está autorizado en Firebase Auth.');
       } else if (code === 'auth/operation-not-allowed' || message.includes('operation-not-allowed')) {
-        setError('El inicio de sesión con Google no está habilitado. El administrador debe activarlo en Firebase Console → Authentication → Sign-in method.');
+        setError('El inicio de sesión con Google no está habilitado en Firebase Console.');
       } else if (code === 'auth/cancelled-popup-request') {
-        setError('Ya hay un intento de inicio de sesión en curso. Espera unos segundos e intenta de nuevo.');
+        setError('Ya hay un intento en curso, espera unos segundos.');
       } else {
-        setError(`Error al iniciar sesión: ${message.slice(0, 120)}`);
+        setError(`Error: ${message.slice(0, 150)}`);
       }
     } finally {
       setSigningIn(false);

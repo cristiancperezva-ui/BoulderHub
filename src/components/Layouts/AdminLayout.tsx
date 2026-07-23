@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { RoleSwitcher } from '@/components/RoleSwitcher';
 import {
   LayoutDashboard,
   Wallpaper,
@@ -46,9 +47,12 @@ export function AdminLayout() {
         <span style={{ fontWeight: 700, color: 'var(--color-accent-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Shield size={18} /> BoulderHub · Admin
         </span>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-          {profile?.displayName ?? ''}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <RoleSwitcher />
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+            {profile?.displayName ?? ''}
+          </span>
+        </div>
       </header>
 
       <div style={{ display: 'flex', flex: 1 }}>
@@ -86,7 +90,7 @@ export function AdminLayout() {
         </aside>
 
         {mobileOpen && (
-          <div style={{
+          <div className="mobile-nav-overlay" style={{
             position: 'fixed' as const, top: 57, left: 0, right: 0, bottom: 0,
             background: 'var(--color-bg-surface)', zIndex: 100, padding: '1rem 0',
           }}>
@@ -112,10 +116,7 @@ export function AdminLayout() {
           </div>
         )}
 
-        <main style={{
-          flex: 1, padding: '1.5rem', overflowY: 'auto' as const,
-          maxWidth: 1100, width: '100%', margin: '0 auto',
-        }}>
+        <main className="main-content-area">
           <Outlet />
         </main>
       </div>

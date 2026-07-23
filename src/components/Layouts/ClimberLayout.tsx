@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { RoleSwitcher } from '@/components/RoleSwitcher';
 import {
   LayoutDashboard,
   Mountain,
@@ -55,9 +56,12 @@ export function ClimberLayout() {
         <span style={{ fontWeight: 700, color: 'var(--color-accent-primary)' }}>
           🧗 BoulderHub
         </span>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-          {profile?.emoji ?? ''} {profile?.displayName ?? ''}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <RoleSwitcher />
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+            {profile?.emoji ?? ''} {profile?.displayName ?? ''}
+          </span>
+        </div>
       </header>
 
       <div style={{ display: 'flex', flex: 1 }}>
@@ -123,7 +127,7 @@ export function ClimberLayout() {
 
         {/* Mobile nav overlay */}
         {mobileOpen && (
-          <div style={{
+          <div className="mobile-nav-overlay" style={{
             position: 'fixed' as const,
             top: 57,
             left: 0,
@@ -179,14 +183,7 @@ export function ClimberLayout() {
         )}
 
         {/* Contenido principal */}
-        <main style={{
-          flex: 1,
-          padding: '1.5rem',
-          overflowY: 'auto' as const,
-          maxWidth: 1100,
-          width: '100%',
-          margin: '0 auto',
-        }}>
+        <main className="main-content-area">
           <Outlet />
         </main>
       </div>

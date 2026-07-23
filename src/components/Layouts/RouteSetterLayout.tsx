@@ -1,9 +1,11 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { RoleSwitcher } from '@/components/RoleSwitcher';
 import {
   LayoutDashboard,
   PlusCircle,
   List,
+  Medal,
   User,
   LogOut,
   Menu,
@@ -14,7 +16,8 @@ import { useState } from 'react';
 const NAV_ITEMS = [
   { to: '/routesetter/dashboard', icon: LayoutDashboard, label: 'Panel' },
   { to: '/routesetter/blocks/create', icon: PlusCircle, label: 'Nuevo Bloque' },
-  { to: '/routesetter/blocks', icon: List, label: 'Mis Bloques' },
+  { to: '/routesetter/blocks', icon: List, label: 'Bloques' },
+  { to: '/routesetter/challenges', icon: Medal, label: 'Retos' },
   { to: '/routesetter/profile', icon: User, label: 'Perfil' },
 ];
 
@@ -51,9 +54,12 @@ export function RouteSetterLayout() {
         <span style={{ fontWeight: 700, color: 'var(--color-accent-primary)' }}>
           🧗 BoulderHub · Ruteador
         </span>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-          {profile?.displayName ?? ''}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <RoleSwitcher />
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+            {profile?.displayName ?? ''}
+          </span>
+        </div>
       </header>
 
       <div style={{ display: 'flex', flex: 1 }}>
@@ -104,7 +110,7 @@ export function RouteSetterLayout() {
         </aside>
 
         {mobileOpen && (
-          <div style={{
+          <div className="mobile-nav-overlay" style={{
             position: 'fixed' as const, top: 57, left: 0, right: 0, bottom: 0,
             background: 'var(--color-bg-surface)', zIndex: 100, padding: '1rem 0',
           }}>
@@ -130,10 +136,7 @@ export function RouteSetterLayout() {
           </div>
         )}
 
-        <main style={{
-          flex: 1, padding: '1.5rem', overflowY: 'auto' as const,
-          maxWidth: 1100, width: '100%', margin: '0 auto',
-        }}>
+        <main className="main-content-area">
           <Outlet />
         </main>
       </div>

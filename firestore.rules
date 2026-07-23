@@ -3,11 +3,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Config (admins)
+    // Helpers
+    function isAdmin() {
+      return request.auth != null && 
+        'admin' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles;
+    }
+
+    function isRouteSetter() {
+      return request.auth != null && 
+        'routesetter' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles;
+    }
+
+    function isClimber() {
+      return request.auth != null && 
+        'climber' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles;
+    }
+
+    // Config (admins list)
     match /config/{doc} {
       allow read: if true;
-      allow write: if request.auth != null && 
-        request.auth.uid in firestore.get(/databases/$(database)/documents/config/admins).data.uids;
+      allow write: if isAdmin();
     }
 
     // Users
@@ -17,37 +32,31 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == userId;
       allow delete: if false;
 
-      // Solo admin puede cambiar rol
+      // Solo admin puede cambiar roles de otros
       allow write: if request.auth != null && 
-        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) ||
-         request.auth.uid in firestore.get(/databases/$(database)/documents/config/admins).data.uids);
+        (request.auth.uid == userId || isAdmin());
     }
 
     // Walls
     match /walls/{wallId} {
       allow read: if true;
-      allow create: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      allow update: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      allow delete: if false; // soft-delete only
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     // Color categories
     match /colorCategories/{catId} {
       allow read: if true;
-      allow write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if isAdmin();
     }
 
     // Blocks
     match /blocks/{blockId} {
       allow read: if true;
-      allow create: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['routesetter', 'admin'];
+      allow create: if isAdmin() || isRouteSetter();
       allow update: if request.auth != null && 
-        (request.auth.uid == resource.data.routeSetterId ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+        (request.auth.uid == resource.data.routeSetterId || isAdmin());
       allow delete: if false;
 
       // Subcolección: attempts

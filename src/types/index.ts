@@ -8,7 +8,7 @@ export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
-  role: UserRole;
+  roles: UserRole[];          // múltiples roles permitidos
   emoji: string | null;       // solo escaladores
   photoURL: string | null;
   createdAt: number;           // timestamp ms
@@ -103,6 +103,7 @@ export interface Challenge {
   creatorId: string;
   creatorName: string;         // denormalizado
   creatorEmoji: string | null; // denormalizado
+  isRouteSetterChallenge: boolean; // true = reto propuesto por ruteador (🔨)
   blockIds: string[];
   blocks: ChallengeBlock[];    // denormalizado
   avgRating: number;

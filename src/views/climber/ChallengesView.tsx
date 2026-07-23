@@ -1,9 +1,23 @@
 import { Link } from 'react-router-dom';
-import { Medal, Plus, Star } from 'lucide-react';
+import { Medal, Plus, Star, Hammer } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { getAllDocs } from '@/lib/firestore';
+import type { Challenge, FirestoreDoc } from '@/types';
 
 export function ClimberChallengesView() {
-  // TODO: Fetch from Firestore
-  const challenges: { id: string; name: string; creatorName: string; blocks: unknown[]; avgRating: number; totalResults: number }[] = [];
+  const [challenges, setChallenges] = useState<FirestoreDoc<Challenge>[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getAllDocs<Challenge>('challenges', 'createdAt')
+      .then(d => setChallenges(d.filter(c => c.active !== false)))
+      .catch(() => setChallenges([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando retos...</p>;
+  }
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -60,11 +74,12 @@ export function ClimberChallengesView() {
                 alignItems: 'center',
               }}>
                 <div>
-                  <h3 style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: '0 0 0.25rem', fontSize: '1rem' }}>
+                  <h3 style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: '0 0 0.25rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {ch.isRouteSetterChallenge && <Hammer size={16} style={{ color: 'var(--color-accent-primary)' }} />}
                     {ch.name}
                   </h3>
                   <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', margin: 0 }}>
-                    Por {ch.creatorName} · {ch.blocks?.length ?? 0} bloques · {ch.totalResults} resultados
+                    {ch.isRouteSetterChallenge ? '🔨 ' : ''}Por {ch.creatorName} · {ch.blocks?.length ?? 0} bloques · {ch.totalResults} resultados
                   </p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'var(--color-accent-tertiary)' }}>

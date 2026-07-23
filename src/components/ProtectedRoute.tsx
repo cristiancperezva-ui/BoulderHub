@@ -35,15 +35,18 @@ export function ProtectedRoute({ children, requiredRole, allowedRoles }: Protect
   }
 
   if (requiredRole || allowedRoles) {
-    const roles = allowedRoles ?? (requiredRole ? [requiredRole] : []);
-    if (profile && !roles.includes(profile.role)) {
-      // Redirigir al dashboard del rol que tiene
+    const validRoles = allowedRoles ?? (requiredRole ? [requiredRole] : []);
+    const userRoles = profile?.roles ?? [];
+    const hasAccess = validRoles.some(r => userRoles.includes(r));
+    if (!hasAccess) {
+      // Redirigir al dashboard del primer rol que tiene
       const roleRoutes: Record<string, string> = {
         admin: '/admin/dashboard',
         routesetter: '/routesetter/dashboard',
         climber: '/climber/dashboard',
       };
-      return <Navigate to={roleRoutes[profile.role] ?? '/'} replace />;
+      const firstRole = userRoles[0] ?? 'climber';
+      return <Navigate to={roleRoutes[firstRole] ?? '/climber/dashboard'} replace />;
     }
   }
 

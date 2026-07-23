@@ -1,17 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import EmojiPicker, { type EmojiClickData } from 'emoji-picker-react';
-import { Save, Smile } from 'lucide-react';
+import { updateDocById } from '@/lib/firestore';
+import type { UserProfile } from '@/types';
+import { Save, Smile, CheckCircle } from 'lucide-react';
 
 export function ClimberProfileView() {
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
   const [emoji, setEmoji] = useState(profile?.emoji ?? '🧗');
+
+  // Sincronizar estado local cuando el perfil cambia (ej: después de guardar)
+  useEffect(() => {
+    if (profile?.displayName) {
+      setDisplayName(profile.displayName);
+    }
+    if (profile?.emoji) {
+      setEmoji(profile.emoji);
+    }
+  }, [profile?.displayName, profile?.emoji]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
-    // TODO: Update profile in Firestore
-    await refreshProfile();
+    if (!user) return;
+    setSaving(true);
+    try {
+      await updateDocById<Partial<UserProfile>>('users', user.uid, {
+        displayName: displayName.trim() || 'Escalador',
+        emoji,
+      });
+      await refreshProfile();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      console.error('Error al guardar perfil:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onEmojiClick = (emojiData: EmojiClickData) => {
@@ -112,25 +139,33 @@ export function ClimberProfileView() {
           />
         </div>
 
-        <button
-          onClick={handleSave}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.75rem 1.5rem',
-            background: 'var(--color-accent-primary)',
-            color: 'var(--color-text-inverse)',
-            border: 'none',
-            borderRadius: '0.5rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontSize: '0.9rem',
-          }}
-        >
-          <Save size={18} />
-          Guardar cambios
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              background: saving ? 'var(--color-bg-hover)' : 'var(--color-accent-primary)',
+              color: saving ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
+              border: 'none',
+              borderRadius: '0.5rem',
+              fontWeight: 600,
+              cursor: saving ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem',
+            }}
+          >
+            <Save size={18} />
+            {saving ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+          {saved && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'var(--color-state-success)', fontSize: '0.85rem' }}>
+              <CheckCircle size={16} /> Guardado
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

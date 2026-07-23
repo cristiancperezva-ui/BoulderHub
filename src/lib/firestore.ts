@@ -2,7 +2,7 @@
 
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, query, where, orderBy, limit,
+  collection, collectionGroup, query, where, orderBy, limit,
   getDocs, addDoc, serverTimestamp,
   type WhereFilterOp, type OrderByDirection,
   onSnapshot, type Unsubscribe,
@@ -132,6 +132,21 @@ export async function getSubDocs<T>(
 ): Promise<FirestoreDoc<T>[]> {
   const ref = collection(db, parentCollection, parentId, subCollection);
   const q = orderField ? query(ref, orderBy(orderField, orderDir ?? 'desc')) : query(ref);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => snapshotToDoc<T>(d));
+}
+
+/**
+ * Query en collection group (ej: buscar en todas las subcolecciones 'attempts').
+ * Útil para encontrar documentos del usuario sin saber su padre.
+ */
+export async function queryCollectionGroup<T>(
+  collectionName: string,
+  field: string,
+  op: WhereFilterOp,
+  value: unknown,
+): Promise<FirestoreDoc<T>[]> {
+  const q = query(collectionGroup(db, collectionName), where(field, op, value));
   const snap = await getDocs(q);
   return snap.docs.map(d => snapshotToDoc<T>(d));
 }

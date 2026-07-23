@@ -16,7 +16,9 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  role: UserRole | null;
+  roles: UserRole[];
+  isAdmin: boolean;
+  isRouteSetter: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -26,7 +28,9 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
-  role: null,
+  roles: [],
+  isAdmin: false,
+  isRouteSetter: false,
   signInWithGoogle: async () => {},
   signOut: async () => {},
   refreshProfile: async () => {},
@@ -72,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         uid: firebaseUser.uid,
         displayName: firebaseUser.displayName ?? 'Escalador',
         email: firebaseUser.email ?? '',
-        role: 'climber',
+        roles: ['climber'],
         emoji: null,
         photoURL: firebaseUser.photoURL,
         createdAt: Date.now(),
@@ -101,7 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         profile,
         loading,
-        role: profile?.role ?? null,
+        roles: profile?.roles ?? [],
+        isAdmin: profile?.roles?.includes('admin') ?? false,
+        isRouteSetter: profile?.roles?.includes('routesetter') ?? false,
         signInWithGoogle,
         signOut,
         refreshProfile,
