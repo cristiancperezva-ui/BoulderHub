@@ -22,7 +22,7 @@ export function RouteSetterProfileView() {
     setSaving(true);
     try {
       await updateDocById<Partial<UserProfile>>('users', user.uid, {
-        displayName: displayName.trim() || 'Ruteador',
+        displayName: displayName.trim() || 'RouteSetter',
       });
       await refreshProfile();
       setSaved(true);
@@ -49,7 +49,7 @@ export function RouteSetterProfileView() {
       }}>
         <div style={{ marginBottom: '1.25rem' }}>
           <label style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'block' }}>
-            Nombre de ruteador
+            Nombre de routesetter
           </label>
           <input
             value={displayName}

@@ -120,7 +120,7 @@ export function AdminUsersView() {
                           borderRadius: '0.375rem', fontWeight: hasRole ? 600 : 400,
                         }}
                       >
-                        {r === 'admin' ? 'Admin' : r === 'routesetter' ? 'Ruteador' : 'Escalador'}
+                        {r === 'admin' ? 'Admin' : r === 'routesetter' ? 'RouteSetter' : 'Escalador'}
                       </button>
                     );
                   })}

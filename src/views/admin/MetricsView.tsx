@@ -31,9 +31,9 @@ export function AdminMetricsView() {
         }}>
           <li>📊 Calificaciones promedio por bloque y muro</li>
           <li>📈 Días de frecuencia de uso (días/semana)</li>
-          <li>🏔️ Bloques por muro y ruteador</li>
+          <li>🏔️ Bloques por muro y routesetter</li>
           <li>⭐ Distribución de estrellas y tipos de intento</li>
-          <li>🧗 Top ruteadores por popularidad</li>
+          <li>🧗 Top routesetters por popularidad</li>
           <li>📅 Actividad a lo largo del tiempo</li>
         </ul>
       </div>

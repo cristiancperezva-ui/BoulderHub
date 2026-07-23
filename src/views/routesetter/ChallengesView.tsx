@@ -67,7 +67,7 @@ export function RouteSetterChallengesView() {
         name: name.trim(),
         description,
         creatorId: user.uid,
-        creatorName: profile?.displayName ?? 'Ruteador',
+        creatorName: profile?.displayName ?? 'RouteSetter',
         creatorEmoji: profile?.emoji ?? null,
         isRouteSetterChallenge: true,
         blockIds: Array.from(selected),
@@ -96,7 +96,7 @@ export function RouteSetterChallengesView() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.25rem', color: 'var(--color-text-primary)' }}>
-            🔨 Retos de Ruteador
+            🔨 Retos de RouteSetter
           </h1>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', margin: 0 }}>
             Propón retos para los escaladores. Se mostrarán con un 🔨

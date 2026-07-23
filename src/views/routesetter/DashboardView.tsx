@@ -32,10 +32,10 @@ export function RouteSetterDashboardView() {
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.25rem', color: 'var(--color-text-primary)' }}>
-          Panel de Ruteador
+          Panel de RouteSetter
         </h1>
         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
-          Bienvenido, {profile?.displayName ?? 'Ruteador'} — {myBlocks.length} bloque{myBlocks.length !== 1 ? 's' : ''} publicado{myBlocks.length !== 1 ? 's' : ''}
+          Bienvenido, {profile?.displayName ?? 'RouteSetter'} — {myBlocks.length} bloque{myBlocks.length !== 1 ? 's' : ''} publicado{myBlocks.length !== 1 ? 's' : ''}
         </p>
       </div>
 

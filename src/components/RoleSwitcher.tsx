@@ -1,6 +1,6 @@
 // ─── RoleSwitcher ─────────────────────────────────────────────────────────────
 // Selector de rol visible en el header para usuarios con múltiples roles.
-// Permite cambiar entre las vistas de Admin, Ruteador y Escalador.
+// Permite cambiar entre las vistas de Admin, RouteSetter y Escalador.
 
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,7 +10,7 @@ import type { UserRole } from '@/types';
 
 const ROLE_CONFIG: Record<UserRole, { label: string; icon: typeof Shield; path: string; color: string }> = {
   admin: { label: 'Admin', icon: Shield, path: '/admin/dashboard', color: 'var(--color-accent-primary)' },
-  routesetter: { label: 'Ruteador', icon: Wrench, path: '/routesetter/dashboard', color: 'var(--color-state-success)' },
+  routesetter: { label: 'RouteSetter', icon: Wrench, path: '/routesetter/dashboard', color: 'var(--color-state-success)' },
   climber: { label: 'Escalador', icon: Mountain, path: '/climber/dashboard', color: 'var(--color-state-info)' },
 };
 

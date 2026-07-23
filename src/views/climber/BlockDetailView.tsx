@@ -124,7 +124,7 @@ export function ClimberBlockDetailView() {
         </div>
 
         <div style={{ padding: '1.5rem' }}>
-          {/* Info — orden: Color, Grado ruteador, Grado votado */}
+          {/* Info — orden: Color, Grado routesetter, Grado votado */}
           <div style={{ marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
               <div>
@@ -148,9 +148,9 @@ export function ClimberBlockDetailView() {
               </span>
             </div>
 
-            {/* 2. Grado propuesto por el ruteador */}
+            {/* 2. Grado propuesto por el routesetter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🔧 Grado ruteador:</span>
+              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🔧 Grado routesetter:</span>
               <span style={{
                 fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-accent-primary)',
                 background: 'rgba(232,125,62,0.1)', padding: '0.25rem 0.75rem', borderRadius: '0.5rem',

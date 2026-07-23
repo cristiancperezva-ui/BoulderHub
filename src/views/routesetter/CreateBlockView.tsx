@@ -25,18 +25,18 @@ export function RouteSetterCreateBlockView() {
   const [categories, setCategories] = useState<FirestoreDoc<ColorCategory>[]>([]);
   const [newHoldColor, setNewHoldColor] = useState('#E87D3E');
 
-  // Ruteadores parametrizados (para que un ruteador pueda documentar la ruta de otro)
+  // RouteSetters parametrizados (para que un routesetter pueda documentar la ruta de otro)
   const [routesetters, setRoutesetters] = useState<FirestoreDoc<UserProfile>[]>([]);
   const [selectedRouteSetterId, setSelectedRouteSetterId] = useState('');
 
   useEffect(() => {
     getAllDocs<Wall>('walls').then(setWalls).catch(() => setWalls([]));
     getAllDocs<ColorCategory>('colorCategories').then(setCategories).catch(() => setCategories([]));
-    // Cargar todos los ruteadores
+    // Cargar todos los routesetters
     getAllDocs<UserProfile>('users').then(users => {
       const rsetters = users.filter(u => u.roles?.includes('routesetter'));
       setRoutesetters(rsetters);
-      // Pre-seleccionar el usuario actual si es ruteador
+      // Pre-seleccionar el usuario actual si es routesetter
       if (user && rsetters.find(r => r.id === user.uid)) {
         setSelectedRouteSetterId(user.uid);
       } else if (rsetters.length > 0) {
@@ -88,7 +88,7 @@ export function RouteSetterCreateBlockView() {
         wallId: wall,
         wallName: wallObj?.name ?? wall,
         routeSetterId: selectedRouteSetterId || user.uid,
-        routeSetterName: selectedRSetter?.displayName ?? profile?.displayName ?? 'Ruteador',
+        routeSetterName: selectedRSetter?.displayName ?? profile?.displayName ?? 'RouteSetter',
         photoUrl,
         categoryColorId: category,
         categoryColorName: catObj?.name ?? category,
@@ -265,10 +265,10 @@ export function RouteSetterCreateBlockView() {
           )}
         </div>
 
-        {/* Ruteador responsable */}
+        {/* RouteSetter responsable */}
         <div>
           <label style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'block' }}>
-            Ruteador responsable *
+            RouteSetter responsable *
           </label>
           <select
             value={selectedRouteSetterId}
@@ -281,7 +281,7 @@ export function RouteSetterCreateBlockView() {
               fontSize: '0.9rem', outline: 'none',
             }}
           >
-            {routesetters.length === 0 && <option value="">No hay ruteadores disponibles</option>}
+            {routesetters.length === 0 && <option value="">No hay routesetters disponibles</option>}
             {routesetters.map(r => (
               <option key={r.id} value={r.id}>
                 {r.displayName} {r.id === user?.uid ? '(tú)' : ''}
@@ -290,7 +290,7 @@ export function RouteSetterCreateBlockView() {
           </select>
           {selectedRouteSetterId && selectedRouteSetterId !== user?.uid && (
             <p style={{ color: 'var(--color-accent-tertiary)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-              Estás documentando la ruta de otro ruteador
+              Estás documentando la ruta de otro routesetter
             </p>
           )}
         </div>

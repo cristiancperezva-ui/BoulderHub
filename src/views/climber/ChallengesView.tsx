@@ -71,7 +71,7 @@ export function ClimberChallengesView() {
 
   const canDelete = (ch: FirestoreDoc<Challenge>) => {
     if (!user) return false;
-    // Ruteadores pueden borrar todos
+    // RouteSetters pueden borrar todos
     if (profile?.roles?.includes('routesetter') || profile?.roles?.includes('admin')) return true;
     // Escaladores solo los propios
     return ch.creatorId === user.uid;
@@ -83,7 +83,7 @@ export function ClimberChallengesView() {
     if (!canDelete(ch)) return;
     const msg = ch.creatorId === user?.uid
       ? '¿Estás seguro de eliminar este reto?'
-      : '¿Estás seguro de eliminar este reto? (Eres ruteador/admin)';
+      : '¿Estás seguro de eliminar este reto? (Eres routesetter/admin)';
     if (!window.confirm(msg)) return;
     setDeletingId(ch.id);
     try {

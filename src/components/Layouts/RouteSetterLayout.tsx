@@ -52,7 +52,7 @@ export function RouteSetterLayout() {
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
         <span style={{ fontWeight: 700, color: 'var(--color-accent-primary)' }}>
-          🧗 BoulderHub · Ruteador
+          🧗 BoulderHub · RouteSetter
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <RoleSwitcher />

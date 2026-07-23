@@ -105,7 +105,7 @@ export function RouteSetterMyBlocksView() {
         }}>
           <Search size={18} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por muro, ruteador, color..."
+            placeholder="Buscar por muro, routesetter, color..."
             style={{ flex: 1, background: 'none', border: 'none', color: 'var(--color-text-primary)', fontSize: '0.9rem', outline: 'none' }}
           />
         </div>

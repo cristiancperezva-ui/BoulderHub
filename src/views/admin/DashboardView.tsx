@@ -42,7 +42,7 @@ export function AdminDashboardView() {
     { icon: Users, label: 'Escaladores', value: String(users.length), color: 'var(--color-accent-tertiary)' },
     { icon: Activity, label: 'Intentos totales', value: String(totalAttempts), color: 'var(--color-state-error)' },
     { icon: Star, label: 'Rating promedio', value: avgRating > 0 ? avgRating.toFixed(1) : '—', color: 'var(--color-accent-tertiary)' },
-    { icon: Medal, label: 'Top ruteador', value: topSetter.name || '—', color: 'var(--color-accent-primary)' },
+    { icon: Medal, label: 'Top routesetter', value: topSetter.name || '—', color: 'var(--color-accent-primary)' },
   ];
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando...</p>;
@@ -78,7 +78,7 @@ export function AdminDashboardView() {
           borderRadius: '0.75rem', padding: '1.25rem',
         }}>
           <h3 style={{ color: 'var(--color-text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem' }}>
-            🏆 Ranking de ruteadores
+            🏆 Ranking de routesetters
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {Array.from(new Set(blocks.map(b => b.routeSetterName))).map(name => {

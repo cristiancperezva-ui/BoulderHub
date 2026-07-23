@@ -41,7 +41,7 @@ export type AttemptType = 'flash' | 'encadenado' | 'proyecto';
 /** Rango de intentos (solo para encadenado) */
 export type AttemptsRange = '2-5' | '5-10' | '10+';
 
-/** Bloque publicado por un ruteador */
+/** Bloque publicado por un routesetter */
 export interface Block {
   id: string;
   wallId: string;
@@ -104,7 +104,7 @@ export interface Challenge {
   creatorId: string;
   creatorName: string;         // denormalizado
   creatorEmoji: string | null; // denormalizado
-  isRouteSetterChallenge: boolean; // true = reto propuesto por ruteador (🔨)
+  isRouteSetterChallenge: boolean; // true = reto propuesto por routesetter (🔨)
   blockIds: string[];
   blocks: ChallengeBlock[];    // denormalizado
   avgRating: number;

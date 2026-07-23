@@ -29,7 +29,7 @@ const translations: Record<string, { es: string; en: string }> = {
 
   // Roles
   'role.climber': { es: 'Escalador', en: 'Climber' },
-  'role.routesetter': { es: 'Ruteador', en: 'Route Setter' },
+  'role.routesetter': { es: 'RouteSetter', en: 'Route Setter' },
   'role.admin': { es: 'Administrador', en: 'Administrator' },
 
   // Navigation
@@ -56,7 +56,7 @@ const translations: Record<string, { es: string; en: string }> = {
   'block.holdColors': { es: 'Colores de presas', en: 'Hold colors' },
   'block.category': { es: 'Categoría de color', en: 'Color category' },
   'block.wall': { es: 'Muro', en: 'Wall' },
-  'block.routeSetter': { es: 'Ruteador', en: 'Route Setter' },
+  'block.routeSetter': { es: 'RouteSetter', en: 'Route Setter' },
   'block.date': { es: 'Fecha', en: 'Date' },
 
   // Challenges

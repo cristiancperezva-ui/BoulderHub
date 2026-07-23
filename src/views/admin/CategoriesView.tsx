@@ -88,7 +88,7 @@ export function AdminCategoriesView() {
         borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1.5rem',
       }}>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-          Colores disponibles en el gimnasio. No están asociados a un grado V — los ruteadores propondrán la dificultad.
+          Colores disponibles en el gimnasio. No están asociados a un grado V — los routesetters propondrán la dificultad.
         </p>
 
         <button onClick={() => setShowAdd(!showAdd)}
