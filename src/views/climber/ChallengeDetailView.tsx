@@ -1,14 +1,27 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Medal, Hammer, Mountain, Star } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { getDocById } from '@/lib/firestore';
-import type { Challenge, Block, FirestoreDoc } from '@/types';
+import { ArrowLeft, Medal, Hammer, Mountain, Star, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { getDocById, getSubDocs } from '@/lib/firestore';
+import { collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import type { Challenge, Block, Attempt, FirestoreDoc } from '@/types';
 
 export function ClimberChallengeDetailView() {
   const { challengeId } = useParams();
+  const { user } = useAuth();
   const [challenge, setChallenge] = useState<FirestoreDoc<Challenge> | null>(null);
   const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userAttempts, setUserAttempts] = useState<Set<string>>(new Set());
+
+  const hasExpired = useMemo(() => {
+    return blocks.some(b => b.active === false);
+  }, [blocks]);
+
+  const hasParticipated = useMemo(() => {
+    return challenge?.blockIds?.some(id => userAttempts.has(id)) ?? false;
+  }, [challenge, userAttempts]);
 
   useEffect(() => {
     if (!challengeId) return;
@@ -21,11 +34,39 @@ export function ClimberChallengeDetailView() {
           const results = await Promise.all(blockPromises);
           setBlocks(results.filter(Boolean) as FirestoreDoc<Block>[]);
         }
+
+        // Cargar intentos del usuario en los bloques de este reto
+        if (user && ch?.blockIds?.length) {
+          const attemptsSet = new Set<string>();
+          try {
+            const q = query(collectionGroup(db, 'attempts'), where('userId', '==', user.uid));
+            const snap = await getDocs(q);
+            snap.docs.forEach(doc => {
+              const segments = doc.ref.path.split('/');
+              const blockId = segments[segments.length - 3];
+              if (ch.blockIds.includes(blockId)) {
+                attemptsSet.add(blockId);
+              }
+            });
+          } catch (e) {
+            // Fallback: buscar bloque por bloque
+            for (const bid of ch.blockIds) {
+              try {
+
+                const subAttempts = await getSubDocs<Attempt>('blocks', bid, 'attempts');
+                if (subAttempts.some(a => a.userId === user?.uid)) {
+                  attemptsSet.add(bid);
+                }
+              } catch (_) { /* ignore */ }
+            }
+          }
+          setUserAttempts(attemptsSet);
+        }
       } catch (e) { console.warn(e); }
       finally { setLoading(false); }
     };
     load();
-  }, [challengeId]);
+  }, [challengeId, user]);
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando reto...</p>;
   if (!challenge) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Reto no encontrado</p>;
@@ -51,9 +92,11 @@ export function ClimberChallengeDetailView() {
             <Medal size={28} style={{ color: 'var(--color-accent-primary)' }} />
           )}
           <div>
-            <h2 style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: '0 0 0.125rem', fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h2 style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: '0 0 0.125rem', fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               {challenge.isRouteSetterChallenge && <Hammer size={16} style={{ color: 'var(--color-accent-primary)' }} />}
               {challenge.name}
+              {hasExpired && <span style={{ fontSize: '0.65rem', padding: '0.125rem 0.5rem', borderRadius: '999px', background: 'rgba(216,76,76,0.1)', color: 'var(--color-state-error)', fontWeight: 600 }}>Pasado</span>}
+              {hasParticipated && <CheckCircle size={16} style={{ color: 'var(--color-state-success)' }} />}
             </h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', margin: 0 }}>
               {challenge.isRouteSetterChallenge ? '🔨 ' : ''}Por {challenge.creatorName} · {challenge.blocks?.length ?? 0} bloques · {challenge.totalResults} resultados
@@ -72,10 +115,24 @@ export function ClimberChallengeDetailView() {
           </p>
         )}
 
+        {/* Estado de participación */}
+        {!hasParticipated && (
+          <div style={{
+            marginBottom: '1.5rem', padding: '1rem',
+            background: 'rgba(90,155,213,0.1)', border: '1px solid rgba(90,155,213,0.25)',
+            borderRadius: '0.5rem', textAlign: 'center',
+          }}>
+            <p style={{ color: 'var(--color-state-info)', fontSize: '0.85rem', margin: 0 }}>
+              Aún no has participado en este reto. ¡Ve a los bloques y márcalos para participar!
+            </p>
+          </div>
+        )}
+
         {/* Bloques del reto */}
         <div>
           <h3 style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem' }}>
             🧱 Bloques del reto ({blocks.length})
+            {hasParticipated && <span style={{ color: 'var(--color-state-success)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>✅ Participas en {userAttempts.size}/{blocks.length}</span>}
           </h3>
           {blocks.length === 0 ? (
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>
@@ -83,47 +140,56 @@ export function ClimberChallengeDetailView() {
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {blocks.map((block, i) => (
-                <Link key={block.id} to={`/climber/blocks/${block.id}`} style={{ textDecoration: 'none' }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '0.75rem',
-                    padding: '0.75rem', background: 'var(--color-bg-base)',
-                    borderRadius: '0.5rem', border: '1px solid var(--color-border-subtle)',
-                    transition: 'border-color 0.2s',
-                  }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-subtle)'; }}
-                  >
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontWeight: 600, minWidth: 24 }}>
-                      #{i + 1}
-                    </span>
-                    {block.photoUrl ? (
-                      <img src={block.photoUrl} alt="" style={{ width: 48, height: 48, borderRadius: '0.375rem', objectFit: 'cover', flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: 48, height: 48, borderRadius: '0.375rem', background: 'var(--color-bg-elevated)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Mountain size={20} style={{ opacity: 0.4 }} />
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.85rem' }}>
-                          {block.wallName}
-                        </span>
-                        <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
-                          background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600 }}>
-                          V{block.proposedDifficultyV}
+              {blocks.map((block, i) => {
+                const isCompleted = userAttempts.has(block.id);
+                return (
+                  <Link key={block.id} to={`/climber/blocks/${block.id}`} style={{ textDecoration: 'none' }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '0.75rem',
+                      padding: '0.75rem', background: 'var(--color-bg-base)',
+                      borderRadius: '0.5rem', border: '1px solid var(--color-border-subtle)',
+                      transition: 'border-color 0.2s', opacity: block.active === false ? 0.55 : 1,
+                    }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-subtle)'; }}
+                    >
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontWeight: 600, minWidth: 24 }}>
+                        {isCompleted ? '✅' : `#${i + 1}`}
+                      </span>
+                      {block.photoUrl ? (
+                        <img src={block.photoUrl} alt="" style={{ width: 48, height: 48, borderRadius: '0.375rem', objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 48, height: 48, borderRadius: '0.375rem', background: 'var(--color-bg-elevated)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Mountain size={20} style={{ opacity: 0.4 }} />
+                        </div>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.85rem' }}>
+                            {block.wallName}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
+                            background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600 }}>
+                            V{block.proposedDifficultyV}
+                          </span>
+                          {block.active === false && (
+                            <span style={{ fontSize: '0.65rem', padding: '0.125rem 0.375rem', borderRadius: '999px',
+                              background: 'rgba(216,76,76,0.1)', color: 'var(--color-state-error)', fontWeight: 600 }}>
+                              Desactivado
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                          {block.categoryColorName} · {block.routeSetterName}
                         </span>
                       </div>
                       <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                        {block.categoryColorName} · {block.routeSetterName}
+                        ⭐ {block.avgRating?.toFixed(1) || '—'}
                       </span>
                     </div>
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                      ⭐ {block.avgRating?.toFixed(1) || '—'}
-                    </span>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>

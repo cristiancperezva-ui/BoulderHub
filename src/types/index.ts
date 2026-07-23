@@ -56,6 +56,7 @@ export interface Block {
   comments: string;
   createdAt: number;
   active: boolean;
+  deactivatedAt: number | null; // timestamp de cuando se desactivó (para históricos)
   // Métricas computadas (se actualizan con cada intento)
   avgRating: number;
   totalAttempts: number;

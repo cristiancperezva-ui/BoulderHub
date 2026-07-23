@@ -13,6 +13,7 @@ export function ClimberBlockDetailView() {
   const [allAttempts, setAllAttempts] = useState<FirestoreDoc<Attempt>[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showSavedPopup, setShowSavedPopup] = useState(false);
 
   // Form state
   const [attemptType, setAttemptType] = useState<'flash' | 'encadenado' | 'proyecto' | null>(null);
@@ -86,11 +87,16 @@ export function ClimberBlockDetailView() {
         rating: rating || null,
         createdAt: Date.now(),
       });
+      // Recargar intentos para asegurar consistencia
       const attempts = await getSubDocs<Attempt>('blocks', blockId, 'attempts', 'createdAt');
       setAllAttempts(attempts);
       await recalcBlockMetrics(attempts);
+      // Mostrar popup de éxito
+      setShowSavedPopup(true);
+      setTimeout(() => setShowSavedPopup(false), 2500);
     } catch (err) {
       console.error('Error al guardar intento:', err);
+      alert('Error al guardar. Revisa la consola.');
     } finally {
       setSaving(false);
     }
@@ -259,6 +265,19 @@ export function ClimberBlockDetailView() {
               </div>
             </div>
 
+            {/* Popup de éxito */}
+            {showSavedPopup && (
+              <div style={{
+                marginBottom: '0.75rem', padding: '0.75rem 1rem',
+                background: 'rgba(74,158,110,0.15)', border: '1px solid rgba(74,158,110,0.3)',
+                borderRadius: '0.5rem', color: 'var(--color-state-success)',
+                fontSize: '0.85rem', fontWeight: 600, textAlign: 'center',
+                animation: 'fadeIn 0.2s ease-out',
+              }}>
+                ✅ {isEditing ? 'Intento actualizado correctamente' : 'Intento guardado correctamente'}
+              </div>
+            )}
+
             <button onClick={handleSubmit} disabled={!attemptType || saving}
               style={{
                 width: '100%', padding: '0.75rem',
@@ -268,7 +287,7 @@ export function ClimberBlockDetailView() {
                 cursor: (!attemptType || saving) ? 'not-allowed' : 'pointer', fontSize: '0.95rem',
               }}
             >
-              {saving ? 'Guardando...' : isEditing ? '✏️ Actualizar intento' : 'Guardar intento'}
+              {saving ? 'Guardando...' : isEditing ? '✏️ Actualizar' : '💾 Guardar'}
             </button>
           </div>
 

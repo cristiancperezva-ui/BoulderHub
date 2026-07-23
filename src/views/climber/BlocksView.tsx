@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Mountain, Search, X } from 'lucide-react';
 import { getAllDocs } from '@/lib/firestore';
-import { collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/useAuth';
 import type { Block, Attempt, FirestoreDoc } from '@/types';
@@ -35,17 +35,35 @@ export function ClimberBlocksView() {
   useEffect(() => {
     if (!user) return;
     const loadAttempts = async () => {
+      const map = new Map<string, Attempt>();
       try {
+        // Intento 1: collectionGroup (requiere índice en Firestore)
         const q = query(collectionGroup(db, 'attempts'), where('userId', '==', user.uid));
         const snap = await getDocs(q);
-        const map = new Map<string, Attempt>();
         snap.docs.forEach(doc => {
           const segments = doc.ref.path.split('/');
           const blockId = segments[segments.length - 3];
           map.set(blockId, doc.data() as Attempt);
         });
-        setUserAttempts(map);
-      } catch (e) { console.warn('Error loading attempts:', e); }
+      } catch (e) {
+        console.warn('collectionGroup falló, usando fallback:', e);
+        // Fallback: buscar bloque por bloque
+        try {
+          const allBlocks = await getAllDocs<Block>('blocks');
+          for (const b of allBlocks) {
+            try {
+              const attemptSnap = await getDocs(
+                query(collection(db, 'blocks', b.id, 'attempts'), where('userId', '==', user.uid))
+              );
+              attemptSnap.docs.forEach(doc => {
+                const data = doc.data() as Attempt;
+                map.set(b.id, data);
+              });
+            } catch (_) { /* ignorar errores por bloque */ }
+          }
+        } catch (_) { /* ignorar error total */ }
+      }
+      setUserAttempts(map);
     };
     loadAttempts();
   }, [user]);

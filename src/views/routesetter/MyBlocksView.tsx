@@ -27,9 +27,21 @@ export function RouteSetterMyBlocksView() {
   useEffect(() => { loadBlocks(); }, []);
 
   const toggleActive = async (blockId: string, current: boolean) => {
+    // Si va a desactivar, preguntar confirmación
+    if (current) {
+      const confirmed = window.confirm('¿Estás seguro de desactivar este bloque? Se moverá a históricos.');
+      if (!confirmed) return;
+    }
     try {
-      await updateDocById<Block>('blocks', blockId, { active: !current } as Partial<Block>);
-      setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, active: !current } : b));
+      const updates: Partial<Block> = { active: !current };
+      // Si se desactiva, guardar timestamp para históricos
+      if (current) {
+        updates.deactivatedAt = Date.now() as any;
+      } else {
+        updates.deactivatedAt = null as any;
+      }
+      await updateDocById<Block>('blocks', blockId, updates as Partial<Block>);
+      setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, active: !current, deactivatedAt: current ? Date.now() : null } : b));
     } catch (e) { console.error(e); }
   };
 
@@ -161,75 +173,102 @@ export function RouteSetterMyBlocksView() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {filtered.map((block) => (
-            <div key={block.id} style={{
-              display: 'flex', alignItems: 'center', gap: '1rem',
-              padding: '0.75rem 1rem',
-              background: block.active ? 'var(--color-bg-surface)' : 'var(--color-bg-elevated)',
-              border: `1px solid ${block.active ? 'var(--color-border-subtle)' : 'var(--color-border-default)'}`,
-              borderRadius: '0.75rem',
-              opacity: block.active ? 1 : 0.6,
-            }}>
-              {/* Mini foto */}
-              <div style={{
-                width: 60, height: 60, borderRadius: '0.5rem', flexShrink: 0,
-                background: 'var(--color-bg-base)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.7rem', color: 'var(--color-text-muted)',
-                overflow: 'hidden',
-              }}>
-                {block.photoUrl ? (
-                  <img src={block.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <Mountain size={20} style={{ opacity: 0.4 }} />
-                )}
-              </div>
-
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.9rem' }}>
-                    {block.wallName || 'Sin muro'}
-                  </span>
-                  <span style={{
-                    fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
-                    background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600,
-                  }}>
-                    V{block.proposedDifficultyV}
-                  </span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    {block.categoryColorName}
-                  </span>
-                  {!block.active && (
-                    <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
-                      background: 'rgba(216,76,76,0.15)', color: 'var(--color-state-error)', fontWeight: 600 }}>
-                      Inactivo
-                    </span>
-                  )}
-                </div>
-                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.125rem' }}>
-                  {block.routeSetterName} · {new Date(block.createdAt).toLocaleDateString('es-CO')} · ⭐ {block.avgRating?.toFixed(1) || '—'}
-                </div>
-              </div>
-
-              {/* Acciones */}
-              <button onClick={() => toggleActive(block.id, block.active)}
-                title={block.active ? 'Deshabilitar bloque' : 'Habilitar bloque'}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '0.375rem',
-                  padding: '0.5rem 0.75rem',
-                  background: block.active ? 'rgba(216,76,76,0.1)' : 'rgba(74,158,110,0.1)',
-                  color: block.active ? 'var(--color-state-error)' : 'var(--color-state-success)',
-                  border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0,
-                }}
-              >
-                {block.active ? <EyeOff size={14} /> : <Eye size={14} />}
-                {block.active ? 'Desactivar' : 'Activar'}
-              </button>
-            </div>
-          ))}
+          {/* Sección: Activos */}
+          {filtered.filter(b => b.active !== false).length > 0 && (
+            <>
+              <h3 style={{ color: 'var(--color-state-success)', fontSize: '0.85rem', fontWeight: 600, margin: '0.5rem 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                ✅ Activos ({filtered.filter(b => b.active !== false).length})
+              </h3>
+              {filtered.filter(b => b.active !== false).map((block) => (
+                <BlockRow key={block.id} block={block} onToggle={toggleActive} />
+              ))}
+            </>
+          )}
+          {/* Sección: Históricos (inactivos) */}
+          {filtered.filter(b => b.active === false).length > 0 && (
+            <>
+              <h3 style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600, margin: '1rem 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                📦 Históricos ({filtered.filter(b => b.active === false).length})
+              </h3>
+              {filtered.filter(b => b.active === false).map((block) => (
+                <BlockRow key={block.id} block={block} onToggle={toggleActive} />
+              ))}
+            </>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Fila individual de bloque (reutilizada para activos e históricos) */
+function BlockRow({ block, onToggle }: { block: FirestoreDoc<Block>; onToggle: (id: string, active: boolean) => void }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '1rem',
+      padding: '0.75rem 1rem',
+      background: block.active ? 'var(--color-bg-surface)' : 'var(--color-bg-elevated)',
+      border: `1px solid ${block.active ? 'var(--color-border-subtle)' : 'var(--color-border-default)'}`,
+      borderRadius: '0.75rem',
+      opacity: block.active ? 1 : 0.6,
+    }}>
+      {/* Mini foto */}
+      <div style={{
+        width: 60, height: 60, borderRadius: '0.5rem', flexShrink: 0,
+        background: 'var(--color-bg-base)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '0.7rem', color: 'var(--color-text-muted)',
+        overflow: 'hidden',
+      }}>
+        {block.photoUrl ? (
+          <img src={block.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <Mountain size={20} style={{ opacity: 0.4 }} />
+        )}
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.9rem' }}>
+            {block.wallName || 'Sin muro'}
+          </span>
+          <span style={{
+            fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
+            background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600,
+          }}>
+            V{block.proposedDifficultyV}
+          </span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+            {block.categoryColorName}
+          </span>
+          {!block.active && (
+            <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
+              background: 'rgba(216,76,76,0.15)', color: 'var(--color-state-error)', fontWeight: 600 }}>
+              Inactivo
+            </span>
+          )}
+        </div>
+        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.125rem' }}>
+          {block.routeSetterName} · {new Date(block.createdAt).toLocaleDateString('es-CO')} · ⭐ {block.avgRating?.toFixed(1) || '—'}
+          {block.deactivatedAt && ` · 📦 ${new Date(block.deactivatedAt).toLocaleDateString('es-CO')}`}
+        </div>
+      </div>
+
+      {/* Acciones */}
+      <button onClick={() => onToggle(block.id, block.active)}
+        title={block.active ? 'Deshabilitar bloque' : 'Habilitar bloque'}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '0.375rem',
+          padding: '0.5rem 0.75rem',
+          background: block.active ? 'rgba(216,76,76,0.1)' : 'rgba(74,158,110,0.1)',
+          color: block.active ? 'var(--color-state-error)' : 'var(--color-state-success)',
+          border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0,
+        }}
+      >
+        {block.active ? <EyeOff size={14} /> : <Eye size={14} />}
+        {block.active ? 'Desactivar' : 'Activar'}
+      </button>
     </div>
   );
 }

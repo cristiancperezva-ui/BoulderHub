@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Medal, Plus, Star, Hammer, Save, Check, Mountain, Search, X } from 'lucide-react';
-import { getAllDocs, createDoc } from '@/lib/firestore';
+import { Medal, Plus, Star, Hammer, Save, Check, Mountain, Search, X, Trash2 } from 'lucide-react';
+import { getAllDocs, createDoc, deleteDocById } from '@/lib/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import type { Block, Challenge, ChallengeBlock, FirestoreDoc } from '@/types';
 
@@ -267,7 +267,7 @@ export function RouteSetterChallengesView() {
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 style={{
                   color: 'var(--color-text-primary)', fontWeight: 600, margin: '0 0 0.25rem', fontSize: '1rem',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -279,9 +279,28 @@ export function RouteSetterChallengesView() {
                   {ch.isRouteSetterChallenge ? '🔨 ' : ''}Por {ch.creatorName} · {ch.blocks?.length ?? 0} bloques · {ch.totalResults} resultados
                 </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'var(--color-accent-tertiary)' }}>
-                <Star size={16} fill="var(--color-accent-tertiary)" />
-                <span style={{ fontWeight: 600 }}>{ch.avgRating.toFixed(1)}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'var(--color-accent-tertiary)' }}>
+                  <Star size={16} fill="var(--color-accent-tertiary)" />
+                  <span style={{ fontWeight: 600 }}>{ch.avgRating.toFixed(1)}</span>
+                </div>
+                <button onClick={async () => {
+                  if (window.confirm('¿Eliminar este reto definitivamente?')) {
+                    try {
+                      await deleteDocById('challenges', ch.id);
+                      setChallenges(prev => prev.filter(c => c.id !== ch.id));
+                    } catch (e) { console.error(e); }
+                  }
+                }}
+                  style={{
+                    background: 'rgba(216,76,76,0.1)', border: 'none', borderRadius: '0.375rem',
+                    padding: '0.375rem', cursor: 'pointer', color: 'var(--color-state-error)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  title="Eliminar reto"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
           ))}
