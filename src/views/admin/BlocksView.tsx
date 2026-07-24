@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Mountain, Trash2, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { getAllDocs, updateDocById, deleteDocById } from '@/lib/firestore';
 import { formatBlockDate } from '@/lib/scoring';
@@ -11,6 +11,7 @@ export function AdminBlocksView() {
   const [showInactive, setShowInactive] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteWord, setDeleteWord] = useState('');
+  const deleteWordRef = useRef('');
 
   const loadBlocks = async () => {
     setLoading(true);
@@ -38,18 +39,20 @@ export function AdminBlocksView() {
   }, [blocks, search, showInactive]);
 
   const handleDelete = async (blockId: string) => {
-    if (deleteWord !== 'ELIMINAR') return;
+    const word = deleteWordRef.current;
+    if (word !== 'ELIMINAR') return;
     try {
       await deleteDocById('blocks', blockId);
       setBlocks(prev => prev.filter(b => b.id !== blockId));
       setConfirmDelete(null);
       setDeleteWord('');
-    } catch (e) {
+      deleteWordRef.current = '';
+    } catch (e: any) {
       console.error('Error deleting block:', e);
-      alert('Error al eliminar el bloque. Revisa que tengas permisos de admin.');
-      // Resetear estado para permitir nuevos intentos
+      alert('Error al eliminar: ' + (e?.message || e?.code || 'revisa permisos'));
       setConfirmDelete(null);
       setDeleteWord('');
+      deleteWordRef.current = '';
     }
   };
 
@@ -174,7 +177,7 @@ export function AdminBlocksView() {
                     Escribe <strong>ELIMINAR</strong> para confirmar:
                   </p>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input value={deleteWord} onChange={(e) => setDeleteWord(e.target.value)}
+                    <input value={deleteWord} onChange={(e) => { setDeleteWord(e.target.value); deleteWordRef.current = e.target.value; }}
                       placeholder="ELIMINAR"
                       style={{
                         flex: 1, padding: '0.5rem 0.75rem', background: 'var(--color-bg-base)',
@@ -192,7 +195,7 @@ export function AdminBlocksView() {
                       }}>
                       Eliminar
                     </button>
-                    <button onClick={() => { setConfirmDelete(null); setDeleteWord(''); }}
+                    <button onClick={() => { setConfirmDelete(null); setDeleteWord(''); deleteWordRef.current = ''; }}
                       style={{
                         padding: '0.5rem 1rem', borderRadius: '0.375rem', border: '1px solid var(--color-border-default)',
                         background: 'transparent', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '0.8rem',
