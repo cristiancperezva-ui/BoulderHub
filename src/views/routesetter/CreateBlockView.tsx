@@ -4,15 +4,7 @@ import { uploadImageAsWebP } from '@/lib/storage';
 import { createDoc, getAllDocs } from '@/lib/firestore';
 import type { Block, Wall, ColorCategory, UserProfile, FirestoreDoc } from '@/types';
 import { Camera, X, Save, CheckCircle } from 'lucide-react';
-
-/** Paleta de colores predefinidos para presas de escalada */
-const PRESET_COLORS = [
-  '#E87D3E', '#D4A84B', '#4A9E6E', '#5B9BD5', '#C084FC',
-  '#F87171', '#FB923C', '#FBBF24', '#A3E635', '#34D399',
-  '#22D3EE', '#60A5FA', '#818CF8', '#A78BFA', '#E879F9',
-  '#F472B6', '#FB7185', '#9CA3AF', '#6B7280', '#374151',
-  '#FFFFFF', '#F3F4F6', '#D1D5DB', '#111827',
-];
+import { ColorPicker } from '@/components/ui/ColorPicker';
 
 export function RouteSetterCreateBlockView() {
   const { user, profile } = useAuth();
@@ -310,60 +302,19 @@ export function RouteSetterCreateBlockView() {
             Colores de las presas
           </label>
 
-          {/* Paleta de colores predefinidos */}
+          {/* Selector de color canvas-based (funciona en PC y móvil) */}
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))',
-            gap: '0.5rem',
+            background: 'var(--color-bg-base)',
+            border: '1px solid var(--color-border-subtle)',
+            borderRadius: '0.5rem',
+            padding: '1rem',
             marginBottom: '0.75rem',
-            maxWidth: 400,
           }}>
-            {PRESET_COLORS.map((color) => (
-              <button
-                key={color}
-                onClick={() => { setNewHoldColor(color); }}
-                title={color}
-                style={{
-                  width: '100%', aspectRatio: '1',
-                  borderRadius: '0.5rem',
-                  background: color,
-                  border: newHoldColor === color ? '3px solid var(--color-accent-primary)' : '2px solid rgba(255,255,255,0.15)',
-                  cursor: 'pointer',
-                  padding: 0,
-                  transition: 'transform 0.15s, border-color 0.15s',
-                  transform: newHoldColor === color ? 'scale(1.1)' : 'scale(1)',
-                }}
-              />
-            ))}
+            <ColorPicker value={newHoldColor} onChange={(c) => setNewHoldColor(c)} />
           </div>
 
-          {/* Input hexadecimal para color personalizado + botón agregar */}
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '0.5rem',
-              padding: '0.375rem 0.75rem',
-              background: 'var(--color-bg-base)',
-              border: '1px solid var(--color-border-default)',
-              borderRadius: '0.5rem',
-            }}>
-              <div style={{ width: 24, height: 24, borderRadius: '0.25rem', background: newHoldColor, flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }} />
-              <input
-                value={newHoldColor}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setNewHoldColor(v);
-                }}
-                placeholder="#E87D3E"
-                maxLength={7}
-                style={{
-                  width: 80, padding: '0.25rem 0.375rem',
-                  background: 'transparent', border: 'none',
-                  color: 'var(--color-text-primary)',
-                  fontSize: '0.8rem', fontFamily: 'monospace',
-                  outline: 'none',
-                }}
-              />
-            </div>
+          {/* Botón agregar */}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem' }}>
             <button
               onClick={addHoldColor}
               style={{
