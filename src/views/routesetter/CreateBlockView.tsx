@@ -5,6 +5,15 @@ import { createDoc, getAllDocs } from '@/lib/firestore';
 import type { Block, Wall, ColorCategory, UserProfile, FirestoreDoc } from '@/types';
 import { Camera, X, Save, CheckCircle } from 'lucide-react';
 
+/** Paleta de colores predefinidos para presas de escalada */
+const PRESET_COLORS = [
+  '#E87D3E', '#D4A84B', '#4A9E6E', '#5B9BD5', '#C084FC',
+  '#F87171', '#FB923C', '#FBBF24', '#A3E635', '#34D399',
+  '#22D3EE', '#60A5FA', '#818CF8', '#A78BFA', '#E879F9',
+  '#F472B6', '#FB7185', '#9CA3AF', '#6B7280', '#374151',
+  '#FFFFFF', '#F3F4F6', '#D1D5DB', '#111827',
+];
+
 export function RouteSetterCreateBlockView() {
   const { user, profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -295,22 +304,66 @@ export function RouteSetterCreateBlockView() {
           )}
         </div>
 
-        {/* Colores de presas - Color Picker */}
+        {/* Colores de presas - Selector por paleta */}
         <div>
           <label style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'block' }}>
             Colores de las presas
           </label>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-            <input
-              type="color"
-              value={newHoldColor}
-              onChange={(e) => setNewHoldColor(e.target.value)}
-              style={{
-                width: 44, height: 44, padding: 0, border: 'none',
-                borderRadius: '0.5rem', cursor: 'pointer',
-                background: 'none',
-              }}
-            />
+
+          {/* Paleta de colores predefinidos */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))',
+            gap: '0.5rem',
+            marginBottom: '0.75rem',
+            maxWidth: 400,
+          }}>
+            {PRESET_COLORS.map((color) => (
+              <button
+                key={color}
+                onClick={() => { setNewHoldColor(color); }}
+                title={color}
+                style={{
+                  width: '100%', aspectRatio: '1',
+                  borderRadius: '0.5rem',
+                  background: color,
+                  border: newHoldColor === color ? '3px solid var(--color-accent-primary)' : '2px solid rgba(255,255,255,0.15)',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'transform 0.15s, border-color 0.15s',
+                  transform: newHoldColor === color ? 'scale(1.1)' : 'scale(1)',
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Input hexadecimal para color personalizado + botón agregar */}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              padding: '0.375rem 0.75rem',
+              background: 'var(--color-bg-base)',
+              border: '1px solid var(--color-border-default)',
+              borderRadius: '0.5rem',
+            }}>
+              <div style={{ width: 24, height: 24, borderRadius: '0.25rem', background: newHoldColor, flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }} />
+              <input
+                value={newHoldColor}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setNewHoldColor(v);
+                }}
+                placeholder="#E87D3E"
+                maxLength={7}
+                style={{
+                  width: 80, padding: '0.25rem 0.375rem',
+                  background: 'transparent', border: 'none',
+                  color: 'var(--color-text-primary)',
+                  fontSize: '0.8rem', fontFamily: 'monospace',
+                  outline: 'none',
+                }}
+              />
+            </div>
             <button
               onClick={addHoldColor}
               style={{
@@ -324,6 +377,8 @@ export function RouteSetterCreateBlockView() {
               + Agregar color
             </button>
           </div>
+
+          {/* Colores seleccionados */}
           {holdColors.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {holdColors.map((color) => (
@@ -346,7 +401,7 @@ export function RouteSetterCreateBlockView() {
               ))}
             </div>
           ) : (
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Selecciona colores con el picker y agrégalos.</p>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Selecciona colores de la paleta y agrégalos.</p>
           )}
         </div>
 
