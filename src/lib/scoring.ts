@@ -34,3 +34,25 @@ export function calculateTotalScore(
 ): number {
   return blocksResults.reduce((total, block) => total + scoreForAttempt(block.type, block.attemptsRange), 0);
 }
+
+/**
+ * Convierte un valor de timestamp (Firestore Timestamp o number) a Date.
+ */
+function toDate(val: unknown): Date | null {
+  if (!val) return null;
+  if (typeof val === 'number') return new Date(val);
+  if (typeof val === 'object' && val !== null && 'seconds' in val) {
+    return new Date((val as { seconds: number }).seconds * 1000);
+  }
+  return null;
+}
+
+/**
+ * Formatea un timestamp de Firestore a fecha local en español.
+ * Maneja tanto números (Date.now()) como objetos Timestamp de Firestore.
+ */
+export function formatBlockDate(val: unknown): string {
+  const d = toDate(val);
+  if (!d || isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-CO');
+}

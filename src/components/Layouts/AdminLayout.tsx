@@ -6,6 +6,7 @@ import {
   Wallpaper,
   Palette,
   Users,
+  Mountain,
   BarChart3,
   LogOut,
   Menu,
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { to: '/admin/walls', icon: Wallpaper, label: 'Muros' },
   { to: '/admin/categories', icon: Palette, label: 'Categorías' },
   { to: '/admin/users', icon: Users, label: 'Usuarios' },
+  { to: '/admin/blocks', icon: Mountain, label: 'Bloques' },
   { to: '/admin/metrics', icon: BarChart3, label: 'Métricas' },
 ];
 

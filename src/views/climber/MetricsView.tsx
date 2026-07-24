@@ -135,8 +135,11 @@ export function ClimberMetricsView() {
   }, [user, refreshKey]);
 
   const filtered = useMemo(() => {
-    const from = startOfMonth(new Date(dateFrom + '-01'));
-    const to = endOfMonth(new Date(dateTo + '-01'));
+    // Construir fechas como [year, month-1, 1] para evitar problemas de zona horaria
+    const [fy, fm] = dateFrom.split('-').map(Number);
+    const [ty, tm] = dateTo.split('-').map(Number);
+    const from = startOfMonth(new Date(fy, fm - 1, 1));
+    const to = endOfMonth(new Date(ty, tm - 1, 1));
     return records.filter(a => {
       const d = parseISO(a.date);
       return isWithinInterval(d, { start: from, end: to });

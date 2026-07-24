@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { getAllDocs, updateDocById } from '@/lib/firestore';
+import { formatBlockDate } from '@/lib/scoring';
 import type { Block, FirestoreDoc } from '@/types';
 import { Mountain, Eye, EyeOff, Search, Clock, TrendingUp, Star, Filter } from 'lucide-react';
 
@@ -250,8 +251,8 @@ function BlockRow({ block, onToggle }: { block: FirestoreDoc<Block>; onToggle: (
           )}
         </div>
         <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.125rem' }}>
-          {block.routeSetterName} · {new Date(block.createdAt).toLocaleDateString('es-CO')} · ⭐ {block.avgRating?.toFixed(1) || '—'}
-          {block.deactivatedAt && ` · 📦 ${new Date(block.deactivatedAt).toLocaleDateString('es-CO')}`}
+          {block.routeSetterName} · {formatBlockDate(block.createdAt)} · ⭐ {block.avgRating?.toFixed(1) || '—'}
+          {block.deactivatedAt && ` · 📦 ${formatBlockDate(block.deactivatedAt)}`}
         </div>
       </div>
 

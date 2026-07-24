@@ -1,10 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Medal, Hammer, Mountain, Star, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Medal, Hammer, Mountain, Star, CheckCircle, Trophy } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { getDocById, getSubDocs } from '@/lib/firestore';
 import { collectionGroup, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { formatBlockDate, calculateTotalScore, scoreForAttempt } from '@/lib/scoring';
 import type { Challenge, Block, Attempt, FirestoreDoc } from '@/types';
 
 export function ClimberChallengeDetailView() {
@@ -13,7 +14,7 @@ export function ClimberChallengeDetailView() {
   const [challenge, setChallenge] = useState<FirestoreDoc<Challenge> | null>(null);
   const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userAttempts, setUserAttempts] = useState<Set<string>>(new Set());
+  const [userAttempts, setUserAttempts] = useState<Map<string, Attempt>>(new Map());
 
   const hasExpired = useMemo(() => {
     return blocks.some(b => b.active === false);
@@ -22,6 +23,14 @@ export function ClimberChallengeDetailView() {
   const hasParticipated = useMemo(() => {
     return challenge?.blockIds?.some(id => userAttempts.has(id)) ?? false;
   }, [challenge, userAttempts]);
+
+  const userScore = useMemo(() => {
+    const results: { type: Attempt['type']; attemptsRange: Attempt['attemptsRange'] }[] = [];
+    userAttempts.forEach((a) => {
+      results.push({ type: a.type, attemptsRange: a.attemptsRange });
+    });
+    return calculateTotalScore(results as any);
+  }, [userAttempts]);
 
   useEffect(() => {
     if (!challengeId) return;
@@ -35,32 +44,33 @@ export function ClimberChallengeDetailView() {
           setBlocks(results.filter(Boolean) as FirestoreDoc<Block>[]);
         }
 
-        // Cargar intentos del usuario en los bloques de este reto
+        // Cargar intentos del usuario en los bloques de este reto y calcular puntaje
         if (user && ch?.blockIds?.length) {
-          const attemptsSet = new Set<string>();
-          try {
-            const q = query(collectionGroup(db, 'attempts'), where('userId', '==', user.uid));
-            const snap = await getDocs(q);
-            snap.docs.forEach(doc => {
-              const segments = doc.ref.path.split('/');
-              const blockId = segments[segments.length - 3];
-              if (ch.blockIds.includes(blockId)) {
-                attemptsSet.add(blockId);
-              }
-            });
-          } catch (e) {
-            // Fallback: buscar bloque por bloque
-            for (const bid of ch.blockIds) {
-              try {
-
-                const subAttempts = await getSubDocs<Attempt>('blocks', bid, 'attempts');
-                if (subAttempts.some(a => a.userId === user?.uid)) {
-                  attemptsSet.add(bid);
+          const attemptsMap = new Map<string, Attempt>();
+          const loadAttempts = async () => {
+            try {
+              const q = query(collectionGroup(db, 'attempts'), where('userId', '==', user.uid));
+              const snap = await getDocs(q);
+              snap.docs.forEach(doc => {
+                const segments = doc.ref.path.split('/');
+                const blockId = segments[segments.length - 3];
+                if (ch.blockIds.includes(blockId)) {
+                  attemptsMap.set(blockId, doc.data() as Attempt);
                 }
-              } catch (_) { /* ignore */ }
+              });
+            } catch (e) {
+              // Fallback: buscar bloque por bloque
+              for (const bid of ch.blockIds) {
+                try {
+                  const subAttempts = await getSubDocs<Attempt>('blocks', bid, 'attempts');
+                  const myAttempt = subAttempts.find(a => a.userId === user?.uid);
+                  if (myAttempt) attemptsMap.set(bid, myAttempt as Attempt);
+                } catch (_) { /* ignore */ }
+              }
             }
-          }
-          setUserAttempts(attemptsSet);
+          };
+          await loadAttempts();
+          setUserAttempts(attemptsMap);
         }
       } catch (e) { console.warn(e); }
       finally { setLoading(false); }
@@ -100,7 +110,7 @@ export function ClimberChallengeDetailView() {
             </h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', margin: 0 }}>
               {challenge.isRouteSetterChallenge ? '🔨 ' : ''}Por {challenge.creatorName} · {challenge.blocks?.length ?? 0} bloques · {challenge.totalResults} resultados
-              {challenge.createdAt && ` · ${new Date(challenge.createdAt as any).toLocaleDateString('es-CO')}`}
+              {challenge.createdAt && ` · ${formatBlockDate(challenge.createdAt)}`}
             </p>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'var(--color-accent-tertiary)' }}>
@@ -115,8 +125,8 @@ export function ClimberChallengeDetailView() {
           </p>
         )}
 
-        {/* Estado de participación */}
-        {!hasParticipated && (
+        {/* Estado de participación y puntaje */}
+        {!hasParticipated ? (
           <div style={{
             marginBottom: '1.5rem', padding: '1rem',
             background: 'rgba(90,155,213,0.1)', border: '1px solid rgba(90,155,213,0.25)',
@@ -125,6 +135,22 @@ export function ClimberChallengeDetailView() {
             <p style={{ color: 'var(--color-state-info)', fontSize: '0.85rem', margin: 0 }}>
               Aún no has participado en este reto. ¡Ve a los bloques y márcalos para participar!
             </p>
+          </div>
+        ) : (
+          <div style={{
+            marginBottom: '1.5rem', padding: '0.75rem 1rem',
+            background: 'rgba(212,168,75,0.1)', border: '1px solid rgba(212,168,75,0.25)',
+            borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem',
+          }}>
+            <Trophy size={24} style={{ color: 'var(--color-accent-tertiary)' }} />
+            <div>
+              <p style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: 0, fontSize: '0.9rem' }}>
+                ¡Estás participando! · {userAttempts.size}/{blocks.length} bloques completados
+              </p>
+              <p style={{ color: 'var(--color-accent-tertiary)', fontWeight: 700, margin: '0.125rem 0 0', fontSize: '1.125rem' }}>
+                🏆 Puntaje total: {userScore} pts
+              </p>
+            </div>
           </div>
         )}
 
@@ -141,7 +167,8 @@ export function ClimberChallengeDetailView() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {blocks.map((block, i) => {
-                const isCompleted = userAttempts.has(block.id);
+                const myAttempt = userAttempts.get(block.id);
+                const attemptScore = myAttempt ? scoreForAttempt(myAttempt.type, myAttempt.attemptsRange) : 0;
                 return (
                   <Link key={block.id} to={`/climber/blocks/${block.id}`} style={{ textDecoration: 'none' }}>
                     <div style={{
@@ -153,8 +180,8 @@ export function ClimberChallengeDetailView() {
                       onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-subtle)'; }}
                     >
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontWeight: 600, minWidth: 24 }}>
-                        {isCompleted ? '✅' : `#${i + 1}`}
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontWeight: 600, minWidth: 32 }}>
+                        {myAttempt ? '✅' : `#${i + 1}`}
                       </span>
                       {block.photoUrl ? (
                         <img src={block.photoUrl} alt="" style={{ width: 48, height: 48, borderRadius: '0.375rem', objectFit: 'cover', flexShrink: 0 }} />
@@ -183,9 +210,20 @@ export function ClimberChallengeDetailView() {
                           {block.categoryColorName} · {block.routeSetterName}
                         </span>
                       </div>
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                        ⭐ {block.avgRating?.toFixed(1) || '—'}
-                      </span>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        {myAttempt ? (
+                          <span style={{
+                            fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-accent-tertiary)',
+                            background: 'rgba(212,168,75,0.1)', padding: '0.25rem 0.5rem', borderRadius: '0.375rem',
+                          }}>
+                            +{attemptScore} pts
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                            ⭐ {block.avgRating?.toFixed(1) || '—'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </Link>
                 );

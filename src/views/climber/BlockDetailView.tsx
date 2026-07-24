@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { getDocById, setSubDoc, getSubDocs, updateDocById } from '@/lib/firestore';
 import { ImageThumb } from '@/components/ImageZoom';
+import { formatBlockDate } from '@/lib/scoring';
 import type { Block, Attempt, FirestoreDoc } from '@/types';
 
 export function ClimberBlockDetailView() {
@@ -124,57 +125,72 @@ export function ClimberBlockDetailView() {
         </div>
 
         <div style={{ padding: '1.5rem' }}>
-          {/* Info — orden: Color, Grado routesetter, Grado votado */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <h2 style={{ color: 'var(--color-text-primary)', fontSize: '1.25rem', fontWeight: 600, margin: '0 0 0.25rem' }}>
-                  {block.wallName}
-                </h2>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
-                  {block.routeSetterName} · {new Date(block.createdAt).toLocaleDateString('es-CO')}
-                </p>
+          {/* Info + Chart en fila */}
+          <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+            {/* Izquierda: Info del bloque */}
+            <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                <div>
+                  <h2 style={{ color: 'var(--color-text-primary)', fontSize: '1.25rem', fontWeight: 600, margin: '0 0 0.25rem' }}>
+                    {block.wallName}
+                  </h2>
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                    {block.routeSetterName} · {formatBlockDate(block.createdAt)}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            {/* 1. Color */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🎨 Color:</span>
-              <span style={{
-                fontSize: '0.9rem', fontWeight: 600, padding: '0.25rem 0.75rem', borderRadius: '999px',
-                background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)',
-              }}>
-                {block.categoryColorName}
-              </span>
-            </div>
+              {/* 1. Color */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🎨 Color:</span>
+                <span style={{
+                  fontSize: '0.9rem', fontWeight: 600, padding: '0.25rem 0.75rem', borderRadius: '999px',
+                  background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)',
+                }}>
+                  {block.categoryColorName}
+                </span>
+              </div>
 
-            {/* 2. Grado propuesto por el routesetter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🔧 Grado routesetter:</span>
-              <span style={{
-                fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-accent-primary)',
-                background: 'rgba(232,125,62,0.1)', padding: '0.25rem 0.75rem', borderRadius: '0.5rem',
-              }}>
-                V{block.proposedDifficultyV}
-              </span>
-            </div>
-
-            {/* 3. Grado votado por escaladores (consenso del VGradeChart) */}
-            {block.totalAttempts > 0 && (
+              {/* 2. Grado propuesto por el routesetter */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🗳️ Grado comunidad:</span>
-                <ConsensusGradeBadge attempts={allAttempts} />
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🔧 Grado routesetter:</span>
+                <span style={{
+                  fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-accent-primary)',
+                  background: 'rgba(232,125,62,0.1)', padding: '0.25rem 0.75rem', borderRadius: '0.5rem',
+                }}>
+                  V{block.proposedDifficultyV}
+                </span>
               </div>
-            )}
 
-            {block.comments && (
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginTop: '0.75rem', lineHeight: 1.5 }}>
-                {block.comments}
+              {/* 3. Grado votado por escaladores (consenso del VGradeChart) */}
+              {block.totalAttempts > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🗳️ Grado comunidad:</span>
+                  <ConsensusGradeBadge attempts={allAttempts} />
+                </div>
+              )}
+
+              {block.comments && (
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginTop: '0.75rem', lineHeight: 1.5 }}>
+                  {block.comments}
+                </p>
+              )}
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                ⭐ {block.avgRating?.toFixed(1) || '—'} · {block.flashCount ?? 0} flashes · {block.encadenadoCount ?? 0} encadenados · {block.proyectoCount ?? 0} proyectos
               </p>
-            )}
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
-              ⭐ {block.avgRating?.toFixed(1) || '—'} · {block.flashCount ?? 0} flashes · {block.encadenadoCount ?? 0} encadenados · {block.proyectoCount ?? 0} proyectos
-            </p>
+            </div>
+
+            {/* Derecha: Gráfico de frecuencias V */}
+            <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+              {allAttempts.filter(a => a.proposedVMin || a.proposedVMax).length > 0 && (
+                <>
+                  <h3 style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                    📊 Votos de grado
+                  </h3>
+                  <VGradeChart attempts={allAttempts} />
+                </>
+              )}
+            </div>
           </div>
 
           {/* Formulario de intento */}
@@ -291,8 +307,8 @@ export function ClimberBlockDetailView() {
             </button>
           </div>
 
-          {/* Intentos de otros */}
-          <div>
+          {/* Intentos de otros — resumido con conteo */}
+          <div style={{ marginTop: '1.5rem' }}>
             <h3 style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem' }}>
               Intentos de otros escaladores ({allAttempts.length})
             </h3>
@@ -301,46 +317,43 @@ export function ClimberBlockDetailView() {
                 Aún no hay intentos. ¡Sé el primero!
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {allAttempts.map((a) => (
-                  <div key={a.id} style={{
-                    display: 'flex', alignItems: 'center', gap: '0.75rem',
-                    padding: '0.75rem', background: 'var(--color-bg-base)',
-                    borderRadius: '0.5rem', border: '1px solid var(--color-border-subtle)',
+              <div style={{
+                display: 'flex', gap: '0.5rem', flexWrap: 'wrap',
+                padding: '0.75rem', background: 'var(--color-bg-base)',
+                borderRadius: '0.5rem', border: '1px solid var(--color-border-subtle)',
+              }}>
+                <span style={{
+                  padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
+                  background: 'rgba(74,158,110,0.15)', color: 'var(--color-state-success)',
+                }}>
+                  🔥 {allAttempts.filter(a => a.type === 'flash').length} flash
+                </span>
+                <span style={{
+                  padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
+                  background: 'rgba(212,168,75,0.15)', color: 'var(--color-accent-tertiary)',
+                }}>
+                  🧗 {allAttempts.filter(a => a.type === 'encadenado').length} encadenados
+                </span>
+                <span style={{
+                  padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
+                  background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)',
+                }}>
+                  🎯 {allAttempts.filter(a => a.type === 'proyecto').length} proyectos
+                </span>
+                {allAttempts.filter(a => a.rating).length > 0 && (
+                  <span style={{
+                    padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
+                    background: 'rgba(212,168,75,0.1)', color: 'var(--color-accent-tertiary)',
                   }}>
-                    <span style={{ fontSize: '1.25rem' }}>{a.userEmoji || '🧗'}</span>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.85rem' }}>
-                        {a.userName}
-                      </span>
-                      <span style={{
-                        marginLeft: '0.5rem', fontSize: '0.75rem', padding: '0.125rem 0.5rem',
-                        borderRadius: '999px', fontWeight: 600,
-                        background: a.type === 'flash' ? 'rgba(74,158,110,0.15)' :
-                          a.type === 'encadenado' ? 'rgba(212,168,75,0.15)' : 'rgba(90,155,213,0.15)',
-                        color: a.type === 'flash' ? 'var(--color-state-success)' :
-                          a.type === 'encadenado' ? 'var(--color-accent-tertiary)' : 'var(--color-state-info)',
-                      }}>
-                        {a.type === 'flash' ? 'Flash' : a.type === 'encadenado' ? `Encadenado (${a.attemptsRange})` : 'Proyecto'}
-                      </span>
-                      {a.proposedVMin && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginLeft: '0.5rem' }}>V{a.proposedVMin}</span>}
-                      {a.rating && <span style={{ color: 'var(--color-accent-tertiary)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>⭐ {a.rating}</span>}
-                    </div>
-                  </div>
-                ))}
+                    ⭐ Prom. {(() => {
+                      const rated = allAttempts.filter(a => a.rating);
+                      return (rated.reduce((s, a) => s + (a.rating ?? 0), 0) / rated.length).toFixed(1);
+                    })()}
+                  </span>
+                )}
               </div>
             )}
           </div>
-
-          {/* Gráfico de frecuencias V propuestas */}
-          {allAttempts.filter(a => a.proposedVMin || a.proposedVMax).length > 0 && (
-            <div style={{ marginTop: '1.5rem' }}>
-              <h3 style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem' }}>
-                📊 Frecuencia de grados V propuestos por escaladores
-              </h3>
-              <VGradeChart attempts={allAttempts} />
-            </div>
-          )}
         </div>
       </div>
     </div>

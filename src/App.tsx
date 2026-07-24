@@ -15,6 +15,7 @@ import { AdminDashboardView } from '@/views/admin/DashboardView';
 import { AdminWallsView } from '@/views/admin/WallsView';
 import { AdminCategoriesView } from '@/views/admin/CategoriesView';
 import { AdminUsersView } from '@/views/admin/UsersView';
+import { AdminBlocksView } from '@/views/admin/BlocksView';
 import { AdminMetricsView } from '@/views/admin/MetricsView';
 
 // Routesetter views
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="/admin/walls" element={<AdminWallsView />} />
         <Route path="/admin/categories" element={<AdminCategoriesView />} />
         <Route path="/admin/users" element={<AdminUsersView />} />
+        <Route path="/admin/blocks" element={<AdminBlocksView />} />
         <Route path="/admin/metrics" element={<AdminMetricsView />} />
       </Route>
 
