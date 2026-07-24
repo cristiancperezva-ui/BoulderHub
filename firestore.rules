@@ -57,7 +57,7 @@ service cloud.firestore {
       allow create: if isAdmin() || isRouteSetter();
       allow update: if request.auth != null && 
         (request.auth.uid == resource.data.routeSetterId || isAdmin());
-      allow delete: if false;
+      allow delete: if isAdmin();
 
       // Subcolección: attempts
       match /attempts/{userId} {
@@ -71,7 +71,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null;
       allow update: if request.auth != null && request.auth.uid == resource.data.creatorId;
-      allow delete: if false;
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.creatorId || isAdmin());
 
       // Subcolección: results
       match /results/{userId} {

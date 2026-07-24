@@ -46,7 +46,10 @@ export function AdminBlocksView() {
       setDeleteWord('');
     } catch (e) {
       console.error('Error deleting block:', e);
-      alert('Error al eliminar el bloque');
+      alert('Error al eliminar el bloque. Revisa que tengas permisos de admin.');
+      // Resetear estado para permitir nuevos intentos
+      setConfirmDelete(null);
+      setDeleteWord('');
     }
   };
 
