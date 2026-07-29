@@ -21,6 +21,7 @@ export const blockKeys = {
 
 // ─── Todos los bloques activos (para navegación principal) ────────────────────
 // Cachea por 10 min — los bloques no cambian frecuentemente
+// NOTA: Se evita where+orderBy compuesto para no requerir índice en Firestore
 
 export function useActiveBlocks() {
   return useQuery({
@@ -28,11 +29,12 @@ export function useActiveBlocks() {
     queryFn: async () => {
       const q = query(
         collection(db, 'blocks'),
-        where('active', '==', true),
         orderBy('createdAt', 'desc'),
       );
       const snap = await getDocs(q);
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as FirestoreDoc<Block>));
+      return snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as FirestoreDoc<Block>))
+        .filter(b => b.active !== false);
     },
     staleTime: 10 * 60 * 1000,       // 10 min antes de re-validar
     gcTime: 30 * 60 * 1000,           // mantener en caché 30 min
