@@ -1,17 +1,11 @@
-import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllDocs } from '@/lib/firestore';
-import type { Block, FirestoreDoc } from '@/types';
+import { useAllBlocks } from '@/hooks/useBlocks';
 import { Mountain, Star, Eye, TrendingUp } from 'lucide-react';
 
 export function RouteSetterDashboardView() {
   const { user, profile } = useAuth();
-  const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getAllDocs<Block>('blocks', 'createdAt').then(setBlocks).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  // ✅ Todos los bloques cacheados (10 min)
+  const { data: blocks = [], isLoading } = useAllBlocks();
 
   const myBlocks = blocks.filter(b => b.routeSetterId === user?.uid);
   const totalAttempts = myBlocks.reduce((s, b) => s + (b.totalAttempts ?? 0), 0);
@@ -26,7 +20,7 @@ export function RouteSetterDashboardView() {
     { icon: TrendingUp, label: 'Bloques activos', value: String(myBlocks.filter(b => b.active !== false).length), color: 'var(--color-state-success)' },
   ];
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando...</p>;
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>

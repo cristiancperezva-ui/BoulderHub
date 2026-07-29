@@ -1,28 +1,19 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Search, Mountain, Trash2, Eye, EyeOff, AlertTriangle } from 'lucide-react';
-import { getAllDocs, updateDocById, deleteDocById } from '@/lib/firestore';
+import { useAllBlocks } from '@/hooks/useBlocks';
+import { updateDocById, deleteDocById } from '@/lib/firestore';
 import { formatBlockDate } from '@/lib/scoring';
-import type { Block, FirestoreDoc } from '@/types';
+import type { Block } from '@/types';
 
 export function AdminBlocksView() {
-  const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: blocks = [], isLoading } = useAllBlocks();
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteWord, setDeleteWord] = useState('');
   const deleteWordRef = useRef('');
-
-  const loadBlocks = async () => {
-    setLoading(true);
-    try {
-      const data = await getAllDocs<Block>('blocks', 'createdAt');
-      setBlocks(data);
-    } catch (e) { console.warn(e); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { loadBlocks(); }, []);
 
   const filtered = useMemo(() => {
     return blocks.filter(b => {
@@ -43,7 +34,7 @@ export function AdminBlocksView() {
     if (word !== 'ELIMINAR') return;
     try {
       await deleteDocById('blocks', blockId);
-      setBlocks(prev => prev.filter(b => b.id !== blockId));
+      queryClient.invalidateQueries({ queryKey: ['blocks'] });
       setConfirmDelete(null);
       setDeleteWord('');
       deleteWordRef.current = '';
@@ -62,11 +53,11 @@ export function AdminBlocksView() {
         active: !current,
         deactivatedAt: current ? Date.now() as any : null as any,
       } as Partial<Block>);
-      setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, active: !current } : b));
+      queryClient.invalidateQueries({ queryKey: ['blocks'] });
     } catch (e) { console.error(e); }
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando bloques...</p>;
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando bloques...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -114,7 +105,7 @@ export function AdminBlocksView() {
               }}>
                 <div style={{ width: 44, height: 44, borderRadius: '0.375rem', background: 'var(--color-bg-base)', overflow: 'hidden', flexShrink: 0 }}>
                   {block.photoUrl ? (
-                    <img src={block.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={block.photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                       <Mountain size={18} style={{ opacity: 0.3 }} />

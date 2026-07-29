@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Download, Calendar, Mountain, Star, Activity, Users, TrendingUp } from 'lucide-react';
-import { getAllDocs } from '@/lib/firestore';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { useState, useMemo, useCallback } from 'react';
+import { Download, Calendar, Mountain, Star, Activity, Users, TrendingUp, RefreshCw } from 'lucide-react';
+import { useActiveBlocks } from '@/hooks/useBlocks';
+import { useGlobalStats } from '@/hooks/useGlobalStats';
+import { collectionGroup, query, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
-import type { Block, Attempt, FirestoreDoc } from '@/types';
+import type { Attempt } from '@/types';
 
 interface AttemptRecord {
   date: string;
@@ -15,18 +16,12 @@ interface AttemptRecord {
   routeSetterName?: string;
 }
 
-function generateCSV(attempts: AttemptRecord[], blocks: FirestoreDoc<Block>[]): string {
+function generateCSV(attempts: AttemptRecord[]): string {
   const headers = 'Fecha,Bloque,Muro,Routesetter,Tipo,Calificación';
   const rows = attempts.map(a =>
     [a.date, `"${a.blockName ?? ''}"`, `"${a.wallName ?? ''}"`, `"${a.routeSetterName ?? ''}"`, a.type, a.rating ?? ''].join(',')
   );
-  // Agregar resumen de bloques
-  const blockSummary = blocks.map(b =>
-    ['BLOQUE', `"${b.wallName}"`, `"${b.routeSetterName}"`, `V${b.proposedDifficultyV}`, b.categoryColorName,
-      b.active ? 'Activo' : 'Inactivo', String(b.totalAttempts ?? 0), b.avgRating?.toFixed(1) ?? ''].join(',')
-  );
-  const blockHeader = 'Tipo,Bloque,Routesetter,Grado,Color,Estado,Intentos,Rating';
-  return [headers, ...rows, '', blockHeader, ...blockSummary].join('\n');
+  return [headers, ...rows].join('\n');
 }
 
 function downloadCSV(csv: string) {
@@ -40,52 +35,64 @@ function downloadCSV(csv: string) {
 }
 
 export function AdminMetricsView() {
-  const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
-  const [allAttempts, setAllAttempts] = useState<AttemptRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const now = new Date();
   const [dateFrom, setDateFrom] = useState(format(subMonths(now, 3), 'yyyy-MM'));
   const [dateTo, setDateTo] = useState(format(now, 'yyyy-MM'));
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const blocksData = await getAllDocs<Block>('blocks');
-        setBlocks(blocksData);
-        const recs: AttemptRecord[] = [];
+  // ✅ Stats globales cacheados (1 lectura)
+  const { data: stats, isLoading: statsLoading } = useGlobalStats();
+  // ✅ Bloques activos cacheados (10 min)
+  const { data: blocks = [], isLoading: blocksLoading } = useActiveBlocks();
 
-        // Cargar intentos de todos los bloques
-        for (const block of blocksData) {
-          try {
-            const snap = await getDocs(query(collection(db, 'blocks', block.id, 'attempts')));
-            snap.docs.forEach(doc => {
-              const data = doc.data() as Attempt;
-              const ts = data.createdAt;
-              const dateStr = ts
-                ? format(new Date(typeof ts === 'number' ? ts : (ts as any).seconds ? (ts as any).seconds * 1000 : Date.now()), 'yyyy-MM-dd')
-                : format(new Date(), 'yyyy-MM-dd');
-              recs.push({
-                date: dateStr,
-                type: data.type,
-                blockName: block.wallName,
-                wallName: block.wallName,
-                rating: data.rating ?? undefined,
-                routeSetterName: block.routeSetterName,
-              });
-            });
-          } catch (_) { /* ignorar errores por bloque */ }
-        }
+  // Estado para la carga bajo demanda de intentos detallados
+  const [allAttempts, setAllAttempts] = useState<AttemptRecord[] | null>(null);
+  const [loadingAttempts, setLoadingAttempts] = useState(false);
 
-        setAllAttempts(recs);
-      } catch (e) { console.warn(e); }
-      finally { setLoading(false); }
-    };
-    load();
-  }, []);
+  // Cargar intentos SOLO cuando el usuario hace clic en "Cargar detalles" o cambia fecha
+  // Usa collectionGroup — 1 sola consulta en vez de N+1
+  const loadAttemptDetails = useCallback(async () => {
+    setLoadingAttempts(true);
+    try {
+      const recs: AttemptRecord[] = [];
+
+      // Construir mapa de bloques para denormalizar
+      const blockMap = new Map(blocks.map(b => [b.id, b]));
+
+      // 1 sola consulta con collectionGroup (requiere índice compuesto)
+      const q = query(
+        collectionGroup(db, 'attempts'),
+        orderBy('createdAt', 'desc'),
+      );
+      const snap = await getDocs(q);
+      snap.docs.forEach(doc => {
+        const segments = doc.ref.path.split('/');
+        const blockId = segments[segments.length - 3];
+        const data = doc.data() as Attempt;
+        const block = blockMap.get(blockId);
+        const ts = data.createdAt;
+        const dateStr = ts
+          ? format(new Date(typeof ts === 'number' ? ts : (ts as any).seconds ? (ts as any).seconds * 1000 : Date.now()), 'yyyy-MM-dd')
+          : format(new Date(), 'yyyy-MM-dd');
+        recs.push({
+          date: dateStr,
+          type: data.type,
+          blockName: block?.wallName ?? 'Bloque',
+          wallName: block?.wallName ?? '—',
+          rating: data.rating ?? undefined,
+          routeSetterName: block?.routeSetterName ?? '—',
+        });
+      });
+
+      setAllAttempts(recs);
+    } catch (e) {
+      console.warn('Error cargando intentos detallados:', e);
+    } finally {
+      setLoadingAttempts(false);
+    }
+  }, [blocks]);
 
   const filteredAttempts = useMemo(() => {
+    if (!allAttempts) return [];
     const [fy, fm] = dateFrom.split('-').map(Number);
     const [ty, tm] = dateTo.split('-').map(Number);
     const from = startOfMonth(new Date(fy, fm - 1, 1));
@@ -96,16 +103,13 @@ export function AdminMetricsView() {
     });
   }, [allAttempts, dateFrom, dateTo]);
 
-  const activeBlocks = blocks.filter(b => b.active !== false);
-  const totalAttempts = filteredAttempts.length;
+  // KPIs desde stats globales (sin leer intentos)
+  const totalAttempts = allAttempts ? filteredAttempts.length : (stats?.totalAttempts ?? 0);
+  const flashPct = allAttempts && totalAttempts > 0
+    ? `${Math.round(filteredAttempts.filter(a => a.type === 'flash').length / totalAttempts * 100)}%`
+    : '—';
 
-  // Calcular rating promedio del período
-  const avgRating = useMemo(() => {
-    const rated = filteredAttempts.filter(a => a.rating);
-    return rated.length > 0 ? rated.reduce((s, a) => s + a.rating!, 0) / rated.length : 0;
-  }, [filteredAttempts]);
-
-  // Routesetters ranking en el período
+  // Routesetters ranking desde bloques cacheados (sin leer intentos)
   const setterRanking = useMemo(() => {
     const setterMap = new Map<string, { blocks: number; attempts: number; rating: number }>();
     blocks.forEach(b => {
@@ -116,20 +120,21 @@ export function AdminMetricsView() {
       s.attempts += b.totalAttempts ?? 0;
       s.rating += b.avgRating ?? 0;
     });
-    setterMap.forEach((v) => {
-      v.rating = v.blocks > 0 ? v.rating / v.blocks : 0;
-    });
+    setterMap.forEach((v) => { v.rating = v.blocks > 0 ? v.rating / v.blocks : 0; });
     return Array.from(setterMap.entries())
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.blocks - a.blocks);
   }, [blocks]);
 
   const handleExport = () => {
-    const csv = generateCSV(filteredAttempts, blocks);
+    if (!allAttempts) return;
+    const csv = generateCSV(filteredAttempts);
     downloadCSV(csv);
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando métricas...</p>;
+  const isLoading = statsLoading || blocksLoading;
+
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando métricas...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -137,20 +142,37 @@ export function AdminMetricsView() {
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.25rem', color: 'var(--color-text-primary)' }}>Métricas Generales</h1>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
-            {blocks.length} bloques · {allAttempts.length} intentos totales · {activeBlocks.length} activos
+            {stats?.totalBlocks ?? '—'} bloques · {stats?.totalAttempts ?? '—'} intentos totales · {stats?.activeBlocks ?? '—'} activos
           </p>
         </div>
-        <button onClick={handleExport} disabled={filteredAttempts.length === 0}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem',
-            background: filteredAttempts.length > 0 ? 'var(--color-accent-primary)' : 'var(--color-bg-hover)',
-            color: filteredAttempts.length > 0 ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
-            border: 'none', borderRadius: '0.5rem', fontWeight: 600,
-            cursor: filteredAttempts.length > 0 ? 'pointer' : 'not-allowed', fontSize: '0.875rem',
-          }}
-        >
-          <Download size={16} /> Exportar CSV
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {!allAttempts && !loadingAttempts && (
+            <button onClick={loadAttemptDetails}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem',
+                background: 'var(--color-accent-primary)',
+                color: 'var(--color-text-inverse)',
+                border: 'none', borderRadius: '0.5rem', fontWeight: 600,
+                cursor: 'pointer', fontSize: '0.875rem',
+              }}
+            >
+              <Activity size={16} /> Cargar detalles de intentos
+            </button>
+          )}
+          {allAttempts && (
+            <button onClick={handleExport} disabled={filteredAttempts.length === 0}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem',
+                background: filteredAttempts.length > 0 ? 'var(--color-accent-primary)' : 'var(--color-bg-hover)',
+                color: filteredAttempts.length > 0 ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
+                border: 'none', borderRadius: '0.5rem', fontWeight: 600,
+                cursor: filteredAttempts.length > 0 ? 'pointer' : 'not-allowed', fontSize: '0.875rem',
+              }}
+            >
+              <Download size={16} /> Exportar CSV
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Selector de rango de fechas */}
@@ -172,17 +194,15 @@ export function AdminMetricsView() {
             color: 'var(--color-text-primary)', fontSize: '0.85rem' }} />
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — desde caché, 0 lecturas extra */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
         {[
-          { icon: Mountain, label: 'Bloques totales', value: String(blocks.length), color: 'var(--color-state-info)' },
-          { icon: Mountain, label: 'Bloques activos', value: String(activeBlocks.length), color: 'var(--color-state-success)' },
+          { icon: Mountain, label: 'Bloques totales', value: String(stats?.totalBlocks ?? '—'), color: 'var(--color-state-info)' },
+          { icon: Mountain, label: 'Bloques activos', value: String(stats?.activeBlocks ?? '—'), color: 'var(--color-state-success)' },
           { icon: Activity, label: 'Intentos', value: String(totalAttempts), color: 'var(--color-accent-primary)' },
-          { icon: Star, label: 'Rating prom.', value: avgRating > 0 ? avgRating.toFixed(1) : '—', color: 'var(--color-accent-tertiary)' },
+          { icon: Star, label: 'Rating prom.', value: stats?.avgRating && stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—', color: 'var(--color-accent-tertiary)' },
           { icon: Users, label: 'Routesetters', value: String(setterRanking.length), color: 'var(--color-state-error)' },
-          { icon: TrendingUp, label: 'Flash %', value: totalAttempts > 0
-              ? `${Math.round(filteredAttempts.filter(a => a.type === 'flash').length / totalAttempts * 100)}%`
-              : '—', color: 'var(--color-state-success)' },
+          { icon: TrendingUp, label: 'Flash %', value: flashPct, color: 'var(--color-state-success)' },
         ].map(({ icon: Icon, label, value, color }) => (
           <div key={label} style={{
             background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
@@ -195,7 +215,15 @@ export function AdminMetricsView() {
         ))}
       </div>
 
-      {/* Ranking de Routesetters */}
+      {/* Carga bajo demanda de detalles */}
+      {loadingAttempts && (
+        <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)' }}>
+          <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 0.5rem' }} />
+          Cargando detalles de intentos...
+        </div>
+      )}
+
+      {/* Ranking de Routesetters — desde bloques cacheados */}
       <div style={{
         background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
         borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.5rem',
@@ -230,14 +258,14 @@ export function AdminMetricsView() {
         )}
       </div>
 
-      {/* Distribución de tipos de intento */}
-      {totalAttempts > 0 && (
+      {/* Distribución de tipos de intento — solo si se cargaron detalles */}
+      {allAttempts && filteredAttempts.length > 0 && (
         <div style={{
           background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
           borderRadius: '0.75rem', padding: '1.25rem',
         }}>
           <h3 style={{ color: 'var(--color-text-primary)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem' }}>
-            📊 Distribución de intentos
+            📊 Distribución de intentos ({filteredAttempts.length} en el período)
           </h3>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             {[

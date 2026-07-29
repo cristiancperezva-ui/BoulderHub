@@ -192,7 +192,7 @@ export function RouteSetterChallengesView() {
                     }}
                   >
                     {block.photoUrl ? (
-                      <img src={block.photoUrl} alt="" style={{ width: 48, height: 48, borderRadius: '0.375rem', objectFit: 'cover', flexShrink: 0 }} />
+                      <img src={block.photoUrl} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: '0.375rem', objectFit: 'cover', flexShrink: 0 }} />
                     ) : (
                       <div style={{ width: 48, height: 48, borderRadius: '0.375rem', background: 'var(--color-bg-elevated)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Mountain size={20} style={{ opacity: 0.4, color: 'var(--color-text-muted)' }} />

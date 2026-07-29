@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllDocs, updateDocById } from '@/lib/firestore';
+import { useAllBlocks } from '@/hooks/useBlocks';
+import { updateDocById } from '@/lib/firestore';
 import { formatBlockDate } from '@/lib/scoring';
 import type { Block, FirestoreDoc } from '@/types';
 import { Mountain, Eye, EyeOff, Search, Clock, TrendingUp, Star, Filter } from 'lucide-react';
@@ -9,23 +11,15 @@ type SortKey = 'newest' | 'oldest' | 'difficulty' | 'rating';
 
 export function RouteSetterMyBlocksView() {
   const { user } = useAuth();
-  const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ✅ Todos los bloques cacheados (activos + inactivos necesarios para admin)
+  // Para routesetter usamos useQuery personalizado que trae activos e inactivos
+  const { data: blocks = [], isLoading } = useAllBlocks();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'all' | 'mine'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [sort, setSort] = useState<SortKey>('newest');
   const [showSort, setShowSort] = useState(false);
-
-  const loadBlocks = async () => {
-    try {
-      const data = await getAllDocs<Block>('blocks', 'createdAt');
-      setBlocks(data);
-    } catch (e) { console.warn('Blocks load:', e); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { loadBlocks(); }, []);
+  const queryClient = useQueryClient();
 
   const toggleActive = async (blockId: string, current: boolean) => {
     // Si va a desactivar, preguntar confirmación
@@ -35,14 +29,14 @@ export function RouteSetterMyBlocksView() {
     }
     try {
       const updates: Partial<Block> = { active: !current };
-      // Si se desactiva, guardar timestamp para históricos
       if (current) {
         updates.deactivatedAt = Date.now() as any;
       } else {
         updates.deactivatedAt = null as any;
       }
       await updateDocById<Block>('blocks', blockId, updates as Partial<Block>);
-      setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, active: !current, deactivatedAt: current ? Date.now() : null } : b));
+      // Invalidar caché en vez de manipular estado local
+      queryClient.invalidateQueries({ queryKey: ['blocks'] });
     } catch (e) { console.error(e); }
   };
 
@@ -69,7 +63,7 @@ export function RouteSetterMyBlocksView() {
     return result;
   }, [blocks, search, tab, statusFilter, sort, user?.uid]);
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Cargando...</p>;
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)' }}>Cargando...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -222,7 +216,7 @@ function BlockRow({ block, onToggle }: { block: FirestoreDoc<Block>; onToggle: (
         overflow: 'hidden',
       }}>
         {block.photoUrl ? (
-          <img src={block.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={block.photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <Mountain size={20} style={{ opacity: 0.4 }} />
         )}

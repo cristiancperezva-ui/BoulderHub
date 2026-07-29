@@ -55,8 +55,14 @@ service cloud.firestore {
     match /blocks/{blockId} {
       allow read: if true;
       allow create: if isAdmin() || isRouteSetter();
-      allow update: if request.auth != null && 
-        (request.auth.uid == resource.data.routeSetterId || isAdmin());
+      allow update: if request.auth != null && (
+        // El routesetter o admin puede hacer cualquier cambio
+        (request.auth.uid == resource.data.routeSetterId || isAdmin())
+        ||
+        // Cualquier usuario autenticado puede actualizar solo métricas (intentos, rating, etc.)
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['avgRating', 'totalAttempts', 'flashCount', 'encadenadoCount', 'proyectoCount', 'updatedAt']))
+      );
       allow delete: if isAdmin();
 
       // Subcolección: attempts

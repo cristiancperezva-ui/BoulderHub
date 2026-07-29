@@ -1,51 +1,41 @@
-import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllDocs } from '@/lib/firestore';
-import type { Block, UserProfile, FirestoreDoc } from '@/types';
+import { useGlobalStats } from '@/hooks/useGlobalStats';
+import { useActiveBlocks } from '@/hooks/useBlocks';
 import { Wallpaper, Mountain, Users, Medal, Star, Activity } from 'lucide-react';
 
 export function AdminDashboardView() {
   const { profile } = useAuth();
-  const [walls, setWalls] = useState<FirestoreDoc<{ name: string; active: boolean }>[]>([]);
-  const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
-  const [users, setUsers] = useState<FirestoreDoc<UserProfile>[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    Promise.all([
-      getAllDocs<{ name: string; active: boolean }>('walls'),
-      getAllDocs<Block>('blocks'),
-      getAllDocs<UserProfile>('users'),
-    ]).then(([w, b, u]) => {
-      setWalls(w.filter(x => x.active !== false));
-      setBlocks(b);
-      setUsers(u);
-    }).catch(() => {})
-    .finally(() => setLoading(false));
-  }, []);
+  // ✅ 1 lectura a un documento agregado vs 3 lecturas completas
+  const { data: stats, isLoading: statsLoading } = useGlobalStats();
+  // ✅ Bloques cacheados para el ranking (10 min)
+  const { data: blocks = [], isLoading: blocksLoading } = useActiveBlocks();
 
-  const activeBlocks = blocks.filter(b => b.active !== false);
-  const totalAttempts = blocks.reduce((s, b) => s + (b.totalAttempts ?? 0), 0);
-  const avgRating = blocks.length > 0
-    ? blocks.reduce((s, b) => s + (b.avgRating ?? 0), 0) / blocks.length
-    : 0;
-  const topSetter = blocks.reduce<{ name: string; count: number; avg: number }>((best, b) => {
-    const key = b.routeSetterName;
-    if (!best || !best.name) return { name: key, count: 1, avg: b.avgRating ?? 0 };
-    return { name: key, count: best.count + 1, avg: (best.avg + (b.avgRating ?? 0)) / 2 };
-  }, { name: '', count: 0, avg: 0 });
+  const isLoading = statsLoading || blocksLoading;
 
-  const stats = [
-    { icon: Wallpaper, label: 'Muros activos', value: String(walls.length), color: 'var(--color-accent-primary)' },
-    { icon: Mountain, label: 'Bloques totales', value: String(blocks.length), color: 'var(--color-state-info)' },
-    { icon: Mountain, label: 'Bloques activos', value: String(activeBlocks.length), color: 'var(--color-state-success)' },
-    { icon: Users, label: 'Escaladores', value: String(users.length), color: 'var(--color-accent-tertiary)' },
-    { icon: Activity, label: 'Intentos totales', value: String(totalAttempts), color: 'var(--color-state-error)' },
-    { icon: Star, label: 'Rating promedio', value: avgRating > 0 ? avgRating.toFixed(1) : '—', color: 'var(--color-accent-tertiary)' },
+  // Top routesetter (calculado en cliente desde bloques cacheados)
+  const topSetter = blocks.length > 0
+    ? blocks.reduce<{ name: string; count: number; totalRating: number }>((best, b) => {
+        const name = b.routeSetterName;
+        const existing = blocks.filter(x => x.routeSetterName === name);
+        const count = existing.length;
+        const totalRating = existing.reduce((s, x) => s + (x.avgRating ?? 0), 0);
+        if (!best.name || count > best.count) return { name, count, totalRating };
+        return best;
+      }, { name: '', count: 0, totalRating: 0 })
+    : { name: '', count: 0, totalRating: 0 };
+
+  const cards = [
+    { icon: Wallpaper, label: 'Muros activos', value: String(stats?.totalWalls ?? '—'), color: 'var(--color-accent-primary)' },
+    { icon: Mountain, label: 'Bloques totales', value: String(stats?.totalBlocks ?? '—'), color: 'var(--color-state-info)' },
+    { icon: Mountain, label: 'Bloques activos', value: String(stats?.activeBlocks ?? '—'), color: 'var(--color-state-success)' },
+    { icon: Users, label: 'Escaladores', value: String(stats?.totalUsers ?? '—'), color: 'var(--color-accent-tertiary)' },
+    { icon: Activity, label: 'Intentos totales', value: String(stats?.totalAttempts ?? '—'), color: 'var(--color-state-error)' },
+    { icon: Star, label: 'Rating promedio', value: stats?.avgRating && stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—', color: 'var(--color-accent-tertiary)' },
     { icon: Medal, label: 'Top routesetter', value: topSetter.name || '—', color: 'var(--color-accent-primary)' },
   ];
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando...</p>;
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -59,7 +49,7 @@ export function AdminDashboardView() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '2rem' }}>
-        {stats.map(({ icon: Icon, label, value, color }) => (
+        {cards.map(({ icon: Icon, label, value, color }) => (
           <div key={label} style={{
             background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
             borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center',

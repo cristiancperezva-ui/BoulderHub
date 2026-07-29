@@ -1,12 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllDocs } from '@/lib/firestore';
-import { collection, collectionGroup, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { useActiveBlocks } from '@/hooks/useBlocks';
+import { useMyAttempts } from '@/hooks/useAttempts';
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
-import type { Attempt, Block } from '@/types';
+import type { Attempt } from '@/types';
 import {
-  BarChart3, Download, TrendingUp, Award, Flame, Calendar, Star, Activity, RefreshCw
+  BarChart3, Download, TrendingUp, Award, Flame, Calendar, Star, Activity
 } from 'lucide-react';
 
 interface AttemptRecord {
@@ -54,85 +53,39 @@ function calculateStreak(dates: string[]): number {
 }
 
 export function ClimberMetricsView() {
-  const { user, profile } = useAuth();
-  const [records, setRecords] = useState<AttemptRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const { profile } = useAuth();
+
+  // ✅ Datos cacheados — 0 lecturas extra
+  const { data: blocks = [], isLoading: blocksLoading } = useActiveBlocks();
+  const { data: userAttemptsMap = new Map<string, Attempt>(), isLoading: attemptsLoading } = useMyAttempts();
 
   const now = new Date();
   const [dateFrom, setDateFrom] = useState(format(subMonths(now, 3), 'yyyy-MM'));
   const [dateTo, setDateTo] = useState(format(now, 'yyyy-MM'));
 
-  const loadRecords = useCallback(async () => {
-    if (!user) return;
-    setRefreshing(true);
-    try {
-        const blocks = await getAllDocs<Block>('blocks');
-        const blockMap = new Map(blocks.map(b => [b.id, b]));
-        const recs: AttemptRecord[] = [];
-
-        // Intenta primero con collectionGroup (más eficiente)
-        try {
-          const q = query(collectionGroup(db, 'attempts'), where('userId', '==', user.uid));
-          const snap = await getDocs(q);
-          snap.docs.forEach(doc => {
-            const segments = doc.ref.path.split('/');
-            const blockId = segments[segments.length - 3];
-            const data = doc.data() as Attempt;
-            const block = blockMap.get(blockId);
-            const ts = data.createdAt;
-            const dateStr = ts
-              ? format(new Date(typeof ts === 'number' ? ts : (ts as any).seconds ? (ts as any).seconds * 1000 : Date.now()), 'yyyy-MM-dd')
-              : format(new Date(), 'yyyy-MM-dd');
-            recs.push({
-              date: dateStr,
-              type: data.type,
-              attemptsRange: data.attemptsRange ?? undefined,
-              blockName: block?.wallName ?? 'Bloque',
-              wallName: block?.wallName ?? '—',
-              categoryColor: block?.categoryColorName ?? '—',
-              proposedV: block?.proposedDifficultyV,
-              rating: data.rating ?? undefined,
-            });
-          });
-        } catch (cgError) {
-          // Fallback: si collectionGroup falla (falta índice), consultar bloque por bloque
-          console.warn('collectionGroup falló, usando fallback por bloques:', cgError);
-          for (const block of blocks) {
-            try {
-              const attemptSnap = await getDocs(
-                query(collection(db, 'blocks', block.id, 'attempts'), where('userId', '==', user.uid))
-              );
-              attemptSnap.docs.forEach(doc => {
-                const data = doc.data() as Attempt;
-                const ts = data.createdAt;
-                const dateStr = ts
-                  ? format(new Date(typeof ts === 'number' ? ts : (ts as any).seconds ? (ts as any).seconds * 1000 : Date.now()), 'yyyy-MM-dd')
-                  : format(new Date(), 'yyyy-MM-dd');
-                recs.push({
-                  date: dateStr,
-                  type: data.type,
-                  attemptsRange: data.attemptsRange ?? undefined,
-                  blockName: block.wallName ?? 'Bloque',
-                  wallName: block.wallName ?? '—',
-                  categoryColor: block.categoryColorName ?? '—',
-                  proposedV: block.proposedDifficultyV,
-                  rating: data.rating ?? undefined,
-                });
-              });
-            } catch (e) { /* ignorar errores por bloque */ }
-          }
-        }
-
-        setRecords(recs);
-      } catch (e) { console.warn('Metrics load:', e); }
-      finally { setLoading(false); setRefreshing(false); }
-    }, [user]);
-
-  useEffect(() => {
-    loadRecords();
-  }, [user, refreshKey]);
+  // Construir records desde los datos cacheados (en memoria, 0 lecturas)
+  const records: AttemptRecord[] = useMemo(() => {
+    const blockMap = new Map(blocks.map(b => [b.id, b]));
+    const recs: AttemptRecord[] = [];
+    userAttemptsMap.forEach((data, blockId) => {
+      const block = blockMap.get(blockId);
+      const ts = data.createdAt;
+      const dateStr = ts
+        ? format(new Date(typeof ts === 'number' ? ts : (ts as any).seconds ? (ts as any).seconds * 1000 : Date.now()), 'yyyy-MM-dd')
+        : format(new Date(), 'yyyy-MM-dd');
+      recs.push({
+        date: dateStr,
+        type: data.type,
+        attemptsRange: data.attemptsRange ?? undefined,
+        blockName: block?.wallName ?? 'Bloque',
+        wallName: block?.wallName ?? '—',
+        categoryColor: block?.categoryColorName ?? '—',
+        proposedV: block?.proposedDifficultyV,
+        rating: data.rating ?? undefined,
+      });
+    });
+    return recs;
+  }, [blocks, userAttemptsMap]);
 
   const filtered = useMemo(() => {
     // Construir fechas como [year, month-1, 1] para evitar problemas de zona horaria
@@ -162,7 +115,7 @@ export function ClimberMetricsView() {
     downloadCSV(csv, profile?.displayName ?? 'escalador');
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando métricas...</p>;
+  if (blocksLoading || attemptsLoading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando métricas...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -174,17 +127,6 @@ export function ClimberMetricsView() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={() => setRefreshKey(k => k + 1)} disabled={refreshing}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1rem',
-              background: 'var(--color-bg-surface)',
-              color: 'var(--color-text-secondary)',
-              border: '1px solid var(--color-border-default)', borderRadius: '0.5rem', fontWeight: 500,
-              cursor: refreshing ? 'not-allowed' : 'pointer', fontSize: '0.875rem',
-            }}
-          >
-            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'Cargando...' : 'Actualizar'}
-          </button>
           <button onClick={handleExport} disabled={records.length === 0}
             style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem',

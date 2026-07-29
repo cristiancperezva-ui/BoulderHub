@@ -1,49 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
-import { createDoc, getAllDocs, updateDocById } from '@/lib/firestore';
-import type { Wall, FirestoreDoc } from '@/types';
+import { useAdminWalls, useCreateWall, useUpdateWall, useDeactivateWall } from '@/hooks/useAdminData';
+import type { Wall } from '@/types';
 
 export function AdminWallsView() {
-  const [walls, setWalls] = useState<FirestoreDoc<Wall>[]>([]);
-  const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const loadWalls = async () => {
-    try {
-      const data = await getAllDocs<Wall>('walls', 'createdAt');
-      setWalls(data.filter(w => w.active !== false));
-    } catch (e) { console.warn('Walls load:', e); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { loadWalls(); }, []);
+  // ✅ Datos cacheados 10 min
+  const { data: walls = [], isLoading } = useAdminWalls();
+  const createWall = useCreateWall();
+  const updateWall = useUpdateWall();
+  const deactivateWall = useDeactivateWall();
 
   const addWall = async () => {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      await createDoc<Wall>('walls', {
-        name: newName.trim(),
-        active: true,
-        createdBy: 'admin',
-      } as Partial<Wall>);
+      await createWall.mutateAsync(newName.trim());
       setNewName('');
-      await loadWalls();
     } catch (e) { console.error(e); }
     finally { setSaving(false); }
   };
 
   const removeWall = async (id: string) => {
     try {
-      await updateDocById<Wall>('walls', id, { active: false } as Partial<Wall>);
-      await loadWalls();
+      await deactivateWall.mutateAsync(id);
     } catch (e) { console.error(e); }
   };
 
-  const startEdit = (wall: FirestoreDoc<Wall>) => {
+  const startEdit = (wall: Wall & { id: string }) => {
     setEditingId(wall.id);
     setEditName(wall.name);
   };
@@ -51,13 +39,12 @@ export function AdminWallsView() {
   const saveEdit = async () => {
     if (!editingId || !editName.trim()) return;
     try {
-      await updateDocById<Wall>('walls', editingId, { name: editName.trim() } as Partial<Wall>);
+      await updateWall.mutateAsync({ id: editingId, name: editName.trim() });
       setEditingId(null);
-      await loadWalls();
     } catch (e) { console.error(e); }
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Cargando...</p>;
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)' }}>Cargando...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>

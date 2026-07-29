@@ -31,6 +31,7 @@ export function ImageThumb({ src, alt, className, style }: ImageZoomProps) {
         <img
           src={src}
           alt={alt ?? 'Imagen'}
+          loading="lazy"
           style={{
             width: '100%',
             height: '100%',

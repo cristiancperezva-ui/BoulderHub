@@ -1,8 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Star, Mountain, Edit3 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { getDocById, setSubDoc, getSubDocs, updateDocById } from '@/lib/firestore';
+import { useBlock } from '@/hooks/useBlocks';
+import { useBlockAttempts, useSaveAttempt } from '@/hooks/useAttempts';
+import { updateDocById } from '@/lib/firestore';
 import { ImageThumb } from '@/components/ImageZoom';
 import { formatBlockDate } from '@/lib/scoring';
 import type { Block, Attempt, FirestoreDoc } from '@/types';
@@ -10,11 +13,13 @@ import type { Block, Attempt, FirestoreDoc } from '@/types';
 export function ClimberBlockDetailView() {
   const { blockId } = useParams();
   const { user, profile } = useAuth();
-  const [block, setBlock] = useState<FirestoreDoc<Block> | null>(null);
-  const [allAttempts, setAllAttempts] = useState<FirestoreDoc<Attempt>[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
   const [showSavedPopup, setShowSavedPopup] = useState(false);
+
+  // ✅ Datos cacheados con TanStack Query
+  const { data: block, isLoading } = useBlock(blockId);
+  const { data: allAttempts = [] } = useBlockAttempts(blockId);
+  const saveAttempt = useSaveAttempt();
 
   // Form state
   const [attemptType, setAttemptType] = useState<'flash' | 'encadenado' | 'proyecto' | null>(null);
@@ -29,81 +34,71 @@ export function ClimberBlockDetailView() {
 
   const isEditing = !!myAttempt;
 
+  // Inicializar formulario desde intento existente
   useEffect(() => {
-    if (!blockId) return;
-    Promise.all([
-      getDocById<Block>('blocks', blockId),
-      getSubDocs<Attempt>('blocks', blockId, 'attempts', 'createdAt'),
-    ]).then(([blockData, attempts]) => {
-      setBlock(blockData);
-      setAllAttempts(attempts);
-      if (user && attempts) {
-        const mine = attempts.find(a => a.id === user.uid);
-        if (mine) {
-          setAttemptType(mine.type);
-          setAttemptsRange(mine.attemptsRange ?? '');
-          setRating(mine.rating ?? 0);
-          setProposedVGrade(mine.proposedVMin ?? 0);
-        }
-      }
-    }).catch(console.warn)
-    .finally(() => setLoading(false));
-  }, [blockId, user]);
+    if (myAttempt) {
+      setAttemptType(myAttempt.type);
+      setAttemptsRange(myAttempt.attemptsRange ?? '');
+      setRating(myAttempt.rating ?? 0);
+      setProposedVGrade(myAttempt.proposedVMin ?? 0);
+    }
+  }, [myAttempt]);
 
-  /** Recalcula las métricas agregadas del bloque */
-  const recalcBlockMetrics = async (attempts: FirestoreDoc<Attempt>[]) => {
-    if (!blockId) return;
-    const ratings = attempts.filter(a => a.rating).map(a => a.rating!);
-    const avg = ratings.length > 0 ? ratings.reduce((s, r) => s + r, 0) / ratings.length : 0;
-    await updateDocById<Block>('blocks', blockId, {
-      avgRating: Math.round(avg * 10) / 10,
-      totalAttempts: attempts.length,
-      flashCount: attempts.filter(a => a.type === 'flash').length,
-      encadenadoCount: attempts.filter(a => a.type === 'encadenado').length,
-      proyectoCount: attempts.filter(a => a.type === 'proyecto').length,
-    } as Partial<Block>);
-    // Actualizar estado local
-    setBlock(prev => prev ? {
-      ...prev,
-      avgRating: Math.round(avg * 10) / 10,
-      totalAttempts: attempts.length,
-      flashCount: attempts.filter(a => a.type === 'flash').length,
-      encadenadoCount: attempts.filter(a => a.type === 'encadenado').length,
-      proyectoCount: attempts.filter(a => a.type === 'proyecto').length,
-    } : prev);
-  };
+  // Mutation para recalcular métricas del bloque (se ejecuta tras guardar intento)
+  const updateMetrics = useMutation({
+    mutationFn: async (attempts: FirestoreDoc<Attempt>[]) => {
+      if (!blockId) return;
+      const ratings = attempts.filter(a => a.rating).map(a => a.rating!);
+      const avg = ratings.length > 0 ? ratings.reduce((s, r) => s + r, 0) / ratings.length : 0;
+      await updateDocById<Block>('blocks', blockId, {
+        avgRating: Math.round(avg * 10) / 10,
+        totalAttempts: attempts.length,
+        flashCount: attempts.filter(a => a.type === 'flash').length,
+        encadenadoCount: attempts.filter(a => a.type === 'encadenado').length,
+        proyectoCount: attempts.filter(a => a.type === 'proyecto').length,
+      } as Partial<Block>);
+    },
+    onSuccess: () => {
+      // Invalidar caché del bloque para que recargue métricas
+      queryClient.invalidateQueries({ queryKey: ['blocks', 'detail', blockId] });
+      queryClient.invalidateQueries({ queryKey: ['blocks', 'active'] });
+    },
+  });
 
   const handleSubmit = async () => {
     if (!user || !blockId || !attemptType) return;
-    setSaving(true);
     try {
-      await setSubDoc<Attempt>('blocks', blockId, 'attempts', user.uid, {
-        userId: user.uid,
-        userName: profile?.displayName ?? 'Escalador',
-        userEmoji: profile?.emoji ?? null,
-        type: attemptType,
-        attemptsRange: attemptType === 'encadenado' ? (attemptsRange || null) as any : null,
-        proposedVMin: proposedVGrade > 0 ? proposedVGrade : null,
-        proposedVMax: proposedVGrade > 0 ? proposedVGrade : null,
-        rating: rating || null,
-        createdAt: Date.now(),
+      await saveAttempt.mutateAsync({
+        blockId,
+        attempt: {
+          userId: user.uid,
+          userName: profile?.displayName ?? 'Escalador',
+          userEmoji: profile?.emoji ?? null,
+          type: attemptType,
+          attemptsRange: attemptType === 'encadenado' ? (attemptsRange || null) as any : null,
+          proposedVMin: proposedVGrade > 0 ? proposedVGrade : null,
+          proposedVMax: proposedVGrade > 0 ? proposedVGrade : null,
+          rating: rating || null,
+          createdAt: Date.now(),
+        },
       });
-      // Recargar intentos para asegurar consistencia
-      const attempts = await getSubDocs<Attempt>('blocks', blockId, 'attempts', 'createdAt');
-      setAllAttempts(attempts);
-      await recalcBlockMetrics(attempts);
-      // Mostrar popup de éxito
+      // Recalcular métricas del bloque (fallo no crítico — el intento ya se guardó)
+      try {
+        const { getSubDocs } = await import('@/lib/firestore');
+        const freshAttempts = await getSubDocs<Attempt>('blocks', blockId, 'attempts', 'createdAt');
+        await updateMetrics.mutateAsync(freshAttempts);
+      } catch (metricsErr) {
+        console.warn('Métricas no actualizadas (el intento sí se guardó):', metricsErr);
+      }
       setShowSavedPopup(true);
       setTimeout(() => setShowSavedPopup(false), 2500);
     } catch (err) {
       console.error('Error al guardar intento:', err);
       alert('Error al guardar. Revisa la consola.');
-    } finally {
-      setSaving(false);
     }
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando...</p>;
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando...</p>;
   if (!block) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Bloque no encontrado</p>;
 
   return (
@@ -294,16 +289,16 @@ export function ClimberBlockDetailView() {
               </div>
             )}
 
-            <button onClick={handleSubmit} disabled={!attemptType || saving}
+            <button onClick={handleSubmit} disabled={!attemptType || saveAttempt.isPending || updateMetrics.isPending}
               style={{
                 width: '100%', padding: '0.75rem',
-                background: (!attemptType || saving) ? 'var(--color-bg-hover)' : 'var(--color-accent-secondary)',
-                color: (!attemptType || saving) ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
+                background: (!attemptType || saveAttempt.isPending || updateMetrics.isPending) ? 'var(--color-bg-hover)' : 'var(--color-accent-secondary)',
+                color: (!attemptType || saveAttempt.isPending || updateMetrics.isPending) ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
                 border: 'none', borderRadius: '0.5rem', fontWeight: 600,
-                cursor: (!attemptType || saving) ? 'not-allowed' : 'pointer', fontSize: '0.95rem',
+                cursor: (!attemptType || saveAttempt.isPending || updateMetrics.isPending) ? 'not-allowed' : 'pointer', fontSize: '0.95rem',
               }}
             >
-              {saving ? 'Guardando...' : isEditing ? '✏️ Actualizar' : '💾 Guardar'}
+              {saveAttempt.isPending || updateMetrics.isPending ? 'Guardando...' : isEditing ? '✏️ Actualizar' : '💾 Guardar'}
             </button>
           </div>
 

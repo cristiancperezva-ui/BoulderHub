@@ -1,34 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Search, Shield, RefreshCw } from 'lucide-react';
-import { getAllDocs, updateDocById } from '@/lib/firestore';
-import type { UserProfile, UserRole, FirestoreDoc } from '@/types';
+import { useState } from 'react';
+import { Search, Shield } from 'lucide-react';
+import { useAdminUsers, useToggleUserRole } from '@/hooks/useAdminData';
+import type { UserRole } from '@/types';
 
 export function AdminUsersView() {
   const [search, setSearch] = useState('');
-  const [users, setUsers] = useState<FirestoreDoc<UserProfile>[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadUsers = async () => {
-    setLoading(true);
-    try {
-      const data = await getAllDocs<UserProfile>('users', 'createdAt');
-      setUsers(data);
-    } catch (e) { console.warn('Users load:', e); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { loadUsers(); }, []);
-
-  const toggleRole = async (uid: string, role: UserRole) => {
-    const u = users.find(u => u.id === uid);
-    if (!u) return;
-    const has = u.roles.includes(role);
-    const newRoles = has ? u.roles.filter(r => r !== role) : [...u.roles, role];
-    try {
-      await updateDocById<Partial<UserProfile>>('users', uid, { roles: newRoles });
-      await loadUsers();
-    } catch (e) { console.error(e); }
-  };
+  const { data: users = [], isLoading } = useAdminUsers();
+  const toggleRole = useToggleUserRole();
 
   const filtered = users.filter(u =>
     u.displayName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -41,16 +19,6 @@ export function AdminUsersView() {
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: 'var(--color-text-primary)' }}>
           Gestión de Usuarios
         </h1>
-        <button onClick={loadUsers} disabled={loading}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.375rem',
-            padding: '0.5rem 1rem', background: 'var(--color-bg-surface)',
-            border: '1px solid var(--color-border-default)', borderRadius: '0.5rem',
-            color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '0.85rem',
-          }}
-        >
-          <RefreshCw size={14} /> {loading ? 'Cargando...' : 'Actualizar'}
-        </button>
       </div>
 
       <div style={{
@@ -71,7 +39,7 @@ export function AdminUsersView() {
           />
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '2rem' }}>Cargando usuarios...</p>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
@@ -110,7 +78,7 @@ export function AdminUsersView() {
                   {(['climber', 'routesetter', 'admin'] as UserRole[]).map(r => {
                     const hasRole = u.roles?.includes(r) ?? false;
                     return (
-                      <button key={r} onClick={() => toggleRole(u.id, r)}
+                      <button key={r} onClick={() => toggleRole.mutate({ uid: u.id, roles: u.roles.includes(r) ? u.roles.filter(x => x !== r) : [...u.roles, r] })}
                         style={{
                           padding: '0.375rem 0.625rem',
                           background: hasRole ? 'var(--color-bg-hover)' : 'transparent',

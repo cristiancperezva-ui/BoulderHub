@@ -1,76 +1,34 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Mountain, Search, X } from 'lucide-react';
-import { getAllDocs } from '@/lib/firestore';
-import { collection, collectionGroup, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/useAuth';
+import { Mountain, Search, X, ChevronDown } from 'lucide-react';
+import { useActiveBlocks } from '@/hooks/useBlocks';
+import { useMyAttempts } from '@/hooks/useAttempts';
 import type { Block, Attempt, FirestoreDoc } from '@/types';
 
 type StatusFilter = 'all' | 'realizados' | 'sin_realizar' | 'proyecto';
 
+const PAGE_SIZE = 20;
+
 export function ClimberBlocksView() {
-  const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  // Estado del usuario en cada bloque (bloqueId -> tipo de intento)
-  const [userAttempts, setUserAttempts] = useState<Map<string, Attempt>>(new Map());
+  // ✅ 1 sola query cacheada 10 min para TODOS los bloques activos
+  const { data: blocks = [], isLoading } = useActiveBlocks();
 
-  // Filter state
+  // ✅ Intentos del usuario cacheados en localStorage + TanStack Query
+  const { data: userAttempts = new Map<string, Attempt>() } = useMyAttempts();
+
+  // Filter state (todo en cliente porque los datos ya están cacheados)
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedGrades, setSelectedGrades] = useState<number[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sort, setSort] = useState<'newest' | 'difficulty' | 'rating'>('newest');
 
-  useEffect(() => {
-    getAllDocs<Block>('blocks', 'createdAt')
-      .then(d => setBlocks(d.filter(b => b.active !== false)))
-      .catch(() => setBlocks([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Cargar los intentos del usuario actual para todos los bloques
-  useEffect(() => {
-    if (!user) return;
-    const loadAttempts = async () => {
-      const map = new Map<string, Attempt>();
-      try {
-        // Intento 1: collectionGroup (requiere índice en Firestore)
-        const q = query(collectionGroup(db, 'attempts'), where('userId', '==', user.uid));
-        const snap = await getDocs(q);
-        snap.docs.forEach(doc => {
-          const segments = doc.ref.path.split('/');
-          const blockId = segments[segments.length - 3];
-          map.set(blockId, doc.data() as Attempt);
-        });
-      } catch (e) {
-        console.warn('collectionGroup falló, usando fallback:', e);
-        // Fallback: buscar bloque por bloque
-        try {
-          const allBlocks = await getAllDocs<Block>('blocks');
-          for (const b of allBlocks) {
-            try {
-              const attemptSnap = await getDocs(
-                query(collection(db, 'blocks', b.id, 'attempts'), where('userId', '==', user.uid))
-              );
-              attemptSnap.docs.forEach(doc => {
-                const data = doc.data() as Attempt;
-                map.set(b.id, data);
-              });
-            } catch (_) { /* ignorar errores por bloque */ }
-          }
-        } catch (_) { /* ignorar error total */ }
-      }
-      setUserAttempts(map);
-    };
-    loadAttempts();
-  }, [user]);
-
   const allColors = useMemo(() => [...new Set(blocks.map(b => b.categoryColorName).filter(Boolean))], [blocks]);
   const gradeRange = useMemo(() => {
     const grades = blocks.map(b => b.proposedDifficultyV).filter(Boolean);
+    if (grades.length === 0) return [];
     const min = Math.min(...grades);
     const max = Math.max(...grades);
     return Array.from({ length: max - min + 1 }, (_, i) => min + i);
@@ -86,11 +44,9 @@ export function ClimberBlocksView() {
   const filtered = useMemo(() => {
     let result = blocks.filter(b => {
       const attempt = userAttempts.get(b.id);
-      // Filtro por estado
       if (statusFilter === 'realizados' && (!attempt || attempt.type === 'proyecto')) return false;
       if (statusFilter === 'proyecto' && (!attempt || attempt.type !== 'proyecto')) return false;
       if (statusFilter === 'sin_realizar' && attempt) return false;
-
       if (selectedColors.length > 0 && !selectedColors.includes(b.categoryColorName)) return false;
       if (selectedGrades.length > 0 && !selectedGrades.includes(b.proposedDifficultyV)) return false;
       if (search) {
@@ -110,7 +66,13 @@ export function ClimberBlocksView() {
     return result;
   }, [blocks, search, selectedColors, selectedGrades, sort, statusFilter, userAttempts]);
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando bloques...</p>;
+  // Paginación en cliente (los datos ya están en caché)
+  const visibleBlocks = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  const loadMore = () => setVisibleCount(prev => prev + PAGE_SIZE);
+
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>Cargando bloques...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -257,30 +219,55 @@ export function ClimberBlocksView() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {filtered.map((block) => (
-            <BlockCard key={block.id} block={block} />
+          {visibleBlocks.map((block) => (
+            <BlockCard
+              key={block.id}
+              block={block}
+              userAttempt={userAttempts.get(block.id) ?? null}
+            />
           ))}
+
+          {/* Botón "Cargar más" — evita leer todos los bloques de golpe */}
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
+                width: '100%', padding: '0.75rem',
+                background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
+                borderRadius: '0.75rem', color: 'var(--color-text-secondary)',
+                cursor: 'pointer', fontWeight: 500, fontSize: '0.875rem',
+              }}
+            >
+              <ChevronDown size={18} />
+              Mostrar más ({filtered.length - visibleCount} restantes)
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/** Tarjeta de bloque en formato lista (optimizada para mobile) */
-function BlockCard({ block }: { block: FirestoreDoc<Block> }) {
-  // Leer el userAttempts del contexto a través del componente padre
-  // No podemos usar hooks aquí porque BlockCard no tiene acceso directo a userAttempts
-  // Lo pasaremos como prop
+/** Tarjeta de bloque con badge de estado del usuario */
+function BlockCard({ block, userAttempt }: { block: FirestoreDoc<Block>; userAttempt: Attempt | null }) {
+  const statusBadge = userAttempt
+    ? userAttempt.type === 'flash' ? { label: '✅ Flash', color: 'var(--color-state-success)' }
+      : userAttempt.type === 'encadenado' ? { label: '🧗 Encadenado', color: 'var(--color-accent-tertiary)' }
+      : { label: '🎯 Proyecto', color: 'var(--color-state-info)' }
+    : null;
+
   return (
     <Link to={`/climber/blocks/${block.id}`} style={{ textDecoration: 'none' }}>
       <div style={{
         display: 'flex', gap: '0.75rem', padding: '0.75rem',
-        background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
+        background: 'var(--color-bg-surface)', border: `1px solid ${statusBadge ? 'var(--color-accent-tertiary)' : 'var(--color-border-subtle)'}`,
+        borderLeft: statusBadge ? `4px solid ${statusBadge.color}` : '1px solid var(--color-border-subtle)',
         borderRadius: '0.75rem',
         transition: 'border-color 0.2s',
       }}
         onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border-subtle)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = statusBadge ? 'var(--color-accent-tertiary)' : 'var(--color-border-subtle)'; }}
       >
         {/* Thumbnail */}
         <div style={{
@@ -288,7 +275,7 @@ function BlockCard({ block }: { block: FirestoreDoc<Block> }) {
           background: 'var(--color-bg-elevated)', overflow: 'hidden',
         }}>
           {block.photoUrl ? (
-            <img src={block.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={block.photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
               <Mountain size={24} style={{ opacity: 0.4, color: 'var(--color-text-muted)' }} />
@@ -310,6 +297,12 @@ function BlockCard({ block }: { block: FirestoreDoc<Block> }) {
               background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)', fontWeight: 500 }}>
               {block.categoryColorName}
             </span>
+            {statusBadge && (
+              <span style={{ fontSize: '0.65rem', padding: '0.125rem 0.375rem', borderRadius: '999px',
+                background: statusBadge.color + '22', color: statusBadge.color, fontWeight: 600 }}>
+                {statusBadge.label}
+              </span>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>

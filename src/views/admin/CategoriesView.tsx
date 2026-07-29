@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Palette, Trash2, Edit2, Save, X, Plus } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createDoc, getAllDocs, updateDocById } from '@/lib/firestore';
 import type { ColorCategory, FirestoreDoc } from '@/types';
 
@@ -12,9 +13,31 @@ const DEFAULT_CATS = [
   { name: 'Negro', color: '#374151' },
 ];
 
+const CATEGORIES_KEY = ['colorCategories'] as const;
+
+function useColorCategoriesAdmin() {
+  return useQuery({
+    queryKey: CATEGORIES_KEY,
+    queryFn: async () => {
+      const data = await getAllDocs<ColorCategory>('colorCategories', 'order');
+      if (data.length === 0) {
+        for (const cat of DEFAULT_CATS) {
+          await createDoc<ColorCategory>('colorCategories', {
+            name: cat.name, color: cat.color, order: DEFAULT_CATS.indexOf(cat), active: true,
+          } as Partial<ColorCategory>);
+        }
+        return await getAllDocs<ColorCategory>('colorCategories', 'order');
+      }
+      return data.filter(c => c.active !== false);
+    },
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+  });
+}
+
 export function AdminCategoriesView() {
-  const [categories, setCategories] = useState<FirestoreDoc<ColorCategory>[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: categories = [], isLoading } = useColorCategoriesAdmin();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('#888888');
@@ -22,26 +45,7 @@ export function AdminCategoriesView() {
   const [addName, setAddName] = useState('');
   const [addColor, setAddColor] = useState('#E87D3E');
 
-  const load = async () => {
-    try {
-      const data = await getAllDocs<ColorCategory>('colorCategories', 'order');
-      if (data.length === 0) {
-        // Seed defaults if empty
-        for (const cat of DEFAULT_CATS) {
-          await createDoc<ColorCategory>('colorCategories', {
-            name: cat.name, color: cat.color, order: DEFAULT_CATS.indexOf(cat), active: true,
-          } as Partial<ColorCategory>);
-        }
-        const seeded = await getAllDocs<ColorCategory>('colorCategories', 'order');
-        setCategories(seeded);
-      } else {
-        setCategories(data.filter(c => c.active !== false));
-      }
-    } catch (e) { console.warn('Categories load:', e); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, []);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
 
   const addCategory = async () => {
     if (!addName.trim()) return;
@@ -50,14 +54,14 @@ export function AdminCategoriesView() {
         name: addName.trim(), color: addColor, order: categories.length, active: true,
       } as Partial<ColorCategory>);
       setAddName(''); setAddColor('#E87D3E'); setShowAdd(false);
-      await load();
+      invalidate();
     } catch (e) { console.error(e); }
   };
 
   const removeCat = async (id: string) => {
     try {
       await updateDocById<ColorCategory>('colorCategories', id, { active: false } as Partial<ColorCategory>);
-      await load();
+      invalidate();
     } catch (e) { console.error(e); }
   };
 
@@ -71,11 +75,11 @@ export function AdminCategoriesView() {
       await updateDocById<ColorCategory>('colorCategories', editingId, {
         name: editName.trim(), color: editColor,
       } as Partial<ColorCategory>);
-      setEditingId(null); await load();
+      setEditingId(null); invalidate();
     } catch (e) { console.error(e); }
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Cargando...</p>;
+  if (isLoading) return <p style={{ color: 'var(--color-text-muted)' }}>Cargando...</p>;
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>

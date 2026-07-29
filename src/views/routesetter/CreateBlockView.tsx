@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadImageAsWebP } from '@/lib/storage';
-import { createDoc, getAllDocs } from '@/lib/firestore';
-import type { Block, Wall, ColorCategory, UserProfile, FirestoreDoc } from '@/types';
+import { createDoc } from '@/lib/firestore';
+import { useWalls, useColorCategories, useRouteSetters } from '@/hooks/useStaticData';
+import type { Block } from '@/types';
 import { Camera, X, Save, CheckCircle } from 'lucide-react';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 
@@ -20,31 +21,21 @@ export function RouteSetterCreateBlockView() {
   const [saved, setSaved] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadLabel, setUploadLabel] = useState('');
-
-  // Datos desde Firestore (sin mocks)
-  const [walls, setWalls] = useState<FirestoreDoc<Wall>[]>([]);
-  const [categories, setCategories] = useState<FirestoreDoc<ColorCategory>[]>([]);
   const [newHoldColor, setNewHoldColor] = useState('#E87D3E');
 
-  // RouteSetters parametrizados (para que un routesetter pueda documentar la ruta de otro)
-  const [routesetters, setRoutesetters] = useState<FirestoreDoc<UserProfile>[]>([]);
+  // ✅ Datos cacheados con TanStack Query (30 min walls/categories, 10 min routesetters)
+  const { data: walls = [] } = useWalls();
+  const { data: categories = [] } = useColorCategories();
+  const { data: routesetters = [] } = useRouteSetters();
   const [selectedRouteSetterId, setSelectedRouteSetterId] = useState('');
 
-  useEffect(() => {
-    getAllDocs<Wall>('walls').then(setWalls).catch(() => setWalls([]));
-    getAllDocs<ColorCategory>('colorCategories').then(setCategories).catch(() => setCategories([]));
-    // Cargar todos los routesetters
-    getAllDocs<UserProfile>('users').then(users => {
-      const rsetters = users.filter(u => u.roles?.includes('routesetter'));
-      setRoutesetters(rsetters);
-      // Pre-seleccionar el usuario actual si es routesetter
-      if (user && rsetters.find(r => r.id === user.uid)) {
-        setSelectedRouteSetterId(user.uid);
-      } else if (rsetters.length > 0) {
-        setSelectedRouteSetterId(rsetters[0].id);
-      }
-    }).catch(() => setRoutesetters([]));
-  }, []);
+  // Pre-seleccionar routesetter una vez que se carguen los datos
+  const isRoutesetterInitialized = useRef(false);
+  if (!isRoutesetterInitialized.current && routesetters.length > 0 && !selectedRouteSetterId) {
+    const found = user ? routesetters.find(r => r.id === user.uid) : null;
+    setSelectedRouteSetterId(found?.id ?? routesetters[0]?.id ?? '');
+    isRoutesetterInitialized.current = true;
+  }
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -171,6 +162,7 @@ export function RouteSetterCreateBlockView() {
               <img
                 src={photo.preview}
                 alt="Preview"
+                loading="lazy"
                 style={{ width: '100%', maxHeight: 300, borderRadius: '0.5rem', objectFit: 'cover' }}
               />
               <button
