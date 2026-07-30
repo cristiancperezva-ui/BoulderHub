@@ -24,8 +24,7 @@ export function RouteSetterCreateBlockView() {
   const [wall, setWall] = useState('');
   const [category, setCategory] = useState('');
   const [holdColors, setHoldColors] = useState<string[]>([]);
-  const [difficulty, setDifficulty] = useState(6);
-  const [difficultyUnknown, setDifficultyUnknown] = useState(false);
+  const [difficulty, setDifficulty] = useState(0); // 0 = V? desconocido, 1-14 = V1-V14
   const [comments, setComments] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -54,8 +53,7 @@ export function RouteSetterCreateBlockView() {
       setWall(existingBlock.wallId || '');
       setCategory(existingBlock.categoryColorId || '');
       setHoldColors(existingBlock.holdColors || []);
-      setDifficulty(existingBlock.proposedDifficultyV || 6);
-      setDifficultyUnknown(existingBlock.proposedDifficultyUnknown || false);
+      setDifficulty(existingBlock.proposedDifficultyUnknown ? 0 : existingBlock.proposedDifficultyV);
       setComments(existingBlock.comments || '');
       setExistingPhotoUrl(existingBlock.photoUrl || '');
       setSelectedRouteSetterId(existingBlock.routeSetterId || '');
@@ -126,8 +124,8 @@ export function RouteSetterCreateBlockView() {
           categoryColorId: category,
           categoryColorName: catObj?.name ?? category,
           holdColors,
-          proposedDifficultyV: difficultyUnknown ? 0 : difficulty,
-          proposedDifficultyUnknown: difficultyUnknown || undefined,
+          proposedDifficultyV: difficulty,
+          proposedDifficultyUnknown: difficulty === 0 || undefined,
           comments,
         };
         await updateDocById<Block>('blocks', blockId, updates);
@@ -142,8 +140,8 @@ export function RouteSetterCreateBlockView() {
           categoryColorId: category,
           categoryColorName: catObj?.name ?? category,
           holdColors,
-          proposedDifficultyV: difficultyUnknown ? 0 : difficulty,
-          proposedDifficultyUnknown: difficultyUnknown || undefined,
+          proposedDifficultyV: difficulty,
+          proposedDifficultyUnknown: difficulty === 0 || undefined,
           comments,
           active: true,
           avgRating: 0,
@@ -165,8 +163,7 @@ export function RouteSetterCreateBlockView() {
         setWall('');
         setCategory('');
         setHoldColors([]);
-        setDifficulty(6);
-        setDifficultyUnknown(false);
+        setDifficulty(0);
         setComments('');
         setExistingPhotoUrl('');
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -441,66 +438,28 @@ export function RouteSetterCreateBlockView() {
             Dificultad propuesta *
           </label>
 
-          {/* Toggle: V definido / V? desconocido */}
-          <div style={{
-            display: 'flex', gap: '0.5rem', marginBottom: '0.75rem',
-          }}>
-            <button
-              type="button"
-              onClick={() => setDifficultyUnknown(false)}
-              style={{
-                flex: 1, padding: '0.625rem 1rem',
-                background: !difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-bg-base)',
-                color: !difficultyUnknown ? 'var(--color-text-inverse)' : 'var(--color-text-secondary)',
-                border: `1px solid ${!difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-border-default)'}`,
-                borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-                transition: 'all 0.2s',
-              }}
-            >
-              V1 – V14
-            </button>
-            <button
-              type="button"
-              onClick={() => setDifficultyUnknown(true)}
-              style={{
-                flex: 1, padding: '0.625rem 1rem',
-                background: difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-bg-base)',
-                color: difficultyUnknown ? 'var(--color-text-inverse)' : 'var(--color-text-secondary)',
-                border: `1px solid ${difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-border-default)'}`,
-                borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-                transition: 'all 0.2s',
-              }}
-            >
-              <HelpCircle size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.25rem' }} />
-              V? No estoy seguro
-            </button>
-          </div>
-
-          {!difficultyUnknown ? (
-            <>
-              <input
-                type="range" min={1} max={14} value={difficulty}
-                onChange={(e) => setDifficulty(Number(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--color-accent-primary)' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                <span>V1</span>
-                <span style={{ fontWeight: 700, fontSize: '1.125rem', color: 'var(--color-accent-primary)' }}>V{difficulty}</span>
-                <span>V14</span>
-              </div>
-            </>
-          ) : (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-              padding: '1rem', background: 'var(--color-bg-base)', borderRadius: '0.5rem',
-              border: '1px dashed var(--color-border-default)',
-            }}>
-              <HelpCircle size={20} style={{ color: 'var(--color-text-muted)' }} />
-              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                Dificultad sin definir — los escaladores podrán proponer su propia valoración
+          <input
+            type="range" min={0} max={14} value={difficulty}
+            onChange={(e) => setDifficulty(Number(e.target.value))}
+            style={{ width: '100%', accentColor: 'var(--color-accent-primary)' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+            <span style={{ fontWeight: difficulty === 0 ? 700 : 400, color: difficulty === 0 ? 'var(--color-accent-primary)' : undefined }}>
+              <HelpCircle size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.125rem' }} />
+              V?
+            </span>
+            {difficulty === 0 ? (
+              <span style={{ fontWeight: 700, fontSize: '1.125rem', color: 'var(--color-text-muted)' }}>
+                <HelpCircle size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.25rem' }} />
+                Sin definir
               </span>
-            </div>
-          )}
+            ) : (
+              <span style={{ fontWeight: 700, fontSize: '1.125rem', color: 'var(--color-accent-primary)' }}>
+                V{difficulty}
+              </span>
+            )}
+            <span>V14</span>
+          </div>
         </div>
 
         {/* Comentarios */}
