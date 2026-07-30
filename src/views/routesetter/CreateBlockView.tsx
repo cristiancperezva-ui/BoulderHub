@@ -5,7 +5,9 @@ import { useBlock } from '@/hooks/useBlocks';
 import { uploadImageAsWebP } from '@/lib/storage';
 import { createDoc, updateDocById } from '@/lib/firestore';
 import { useWalls, useColorCategories, useRouteSetters } from '@/hooks/useStaticData';
-import { Camera, X, Save, CheckCircle, HelpCircle } from 'lucide-react';
+import { collection, getDocs, writeBatch } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Camera, X, Save, CheckCircle, HelpCircle, AlertTriangle } from 'lucide-react';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 
 export function RouteSetterCreateBlockView() {
@@ -114,6 +116,15 @@ export function RouteSetterCreateBlockView() {
 
       if (isEditing && blockId) {
         // ─── MODO EDICIÓN ───
+        // Confirmar que el setter sabe que borrará intentos previos
+        const confirmed = window.confirm(
+          'Al modificar este bloque se eliminarán TODOS los intentos registrados por los escaladores.\n¿Continuar?'
+        );
+        if (!confirmed) {
+          setSaving(false);
+          return;
+        }
+
         const updates: Record<string, unknown> = {
           wallId: wall,
           wallName: wallObj?.name ?? wall,
@@ -125,9 +136,24 @@ export function RouteSetterCreateBlockView() {
           holdColors,
           proposedDifficultyV: difficulty,
           comments,
+          // Resetear métricas al editar
+          avgRating: 0,
+          totalAttempts: 0,
+          flashCount: 0,
+          encadenadoCount: 0,
+          proyectoCount: 0,
         };
         if (difficulty === 0) updates.proposedDifficultyUnknown = true;
+
         await updateDocById('blocks', blockId, updates);
+
+        // Eliminar todos los intentos previos (subcolección attempts)
+        const attemptsSnap = await getDocs(collection(db, 'blocks', blockId, 'attempts'));
+        if (attemptsSnap.size > 0) {
+          const batch = writeBatch(db);
+          attemptsSnap.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
       } else {
         // ─── MODO CREACIÓN ───
         const newBlock: Record<string, unknown> = {
@@ -190,9 +216,23 @@ export function RouteSetterCreateBlockView() {
         {isEditing ? 'Editar Bloque' : 'Nuevo Bloque'}
       </h1>
       {isEditing && (
-        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-          Editando bloque · {existingBlock?.wallName || ''} · V{existingBlock?.proposedDifficultyV || '?'}
-        </p>
+        <>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+            Editando bloque · {existingBlock?.wallName || ''} · V{existingBlock?.proposedDifficultyV || '?'}
+          </p>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.625rem 0.875rem', marginBottom: '1rem',
+            background: 'rgba(255,183,77,0.12)',
+            border: '1px solid rgba(255,183,77,0.3)',
+            borderRadius: '0.5rem',
+            color: 'var(--color-accent-tertiary)',
+            fontSize: '0.8rem',
+          }}>
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>Al guardar los cambios se eliminarán todos los intentos previos registrados en este bloque.</span>
+          </div>
+        </>
       )}
 
       {saved && (
