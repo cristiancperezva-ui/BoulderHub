@@ -53,18 +53,15 @@ export function ClimberLayout() {
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
-        <span style={{ fontWeight: 700, color: 'var(--color-accent-primary)' }}>
-          🧗 BoulderHub
+        <span style={{ fontWeight: 700, color: 'var(--color-accent-primary)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+          <img src="/icons/icon-192x192.png" alt="" style={{ width: 22, height: 22, borderRadius: '0.375rem' }} />
+          BoulderHub
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <RoleSwitcher />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-            <img src="/icons/icon-192x192.png" alt="BoulderHub"
-              style={{ width: 20, height: 20, borderRadius: '0.25rem' }} />
-            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-              {profile?.displayName ?? ''}
-            </span>
-          </div>
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+            {profile?.emoji ?? ''} {profile?.displayName ?? ''}
+          </span>
         </div>
       </header>
 

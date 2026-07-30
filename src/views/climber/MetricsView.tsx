@@ -122,10 +122,8 @@ export function ClimberMetricsView() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.25rem', color: 'var(--color-text-primary)' }}>Mis Métricas</h1>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-            <img src="/icons/icon-192x192.png" alt="BoulderHub"
-              style={{ width: 20, height: 20, borderRadius: '0.25rem' }} />
-            {profile?.displayName ?? 'Escalador'} · {records.length} intento{records.length !== 1 ? 's' : ''}
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
+            {profile?.emoji ?? ''} {profile?.displayName ?? 'Escalador'} · {records.length} intento{records.length !== 1 ? 's' : ''}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>

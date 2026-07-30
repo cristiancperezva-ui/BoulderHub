@@ -82,7 +82,7 @@ export function AdminDashboardView() {
                   borderRadius: '0.5rem', border: '1px solid var(--color-border-subtle)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: 'var(--color-accent-primary)', fontWeight: 700 }}>🧗</span>
+                    <img src="/icons/icon-192x192.png" alt="" style={{ width: 18, height: 18, borderRadius: '0.25rem' }} />
                     <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.9rem' }}>{name}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>

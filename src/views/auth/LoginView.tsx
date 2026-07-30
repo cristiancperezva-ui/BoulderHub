@@ -65,7 +65,7 @@ export function LoginView() {
       textAlign: 'center',
     }}>
       <div style={{ maxWidth: 420, width: '100%' }}>
-        <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🧗</div>
+        <img src="/icons/icon-192x192.png" alt="BoulderHub" style={{ width: 80, height: 80, marginBottom: '1rem', borderRadius: '0.75rem' }} />
         <h1 style={{
           fontSize: '2rem',
           fontWeight: 700,

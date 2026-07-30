@@ -16,7 +16,8 @@ export function PublicLayout() {
           color: 'var(--color-accent-primary)',
           textDecoration: 'none',
         }}>
-          🧗 BoulderHub
+          <img src="/icons/icon-192x192.png" alt="" style={{ width: 24, height: 24, borderRadius: '0.375rem' }} />
+          BoulderHub
         </Link>
         <nav style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <Link to="/legal" style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>

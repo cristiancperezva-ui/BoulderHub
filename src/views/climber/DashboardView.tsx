@@ -27,10 +27,8 @@ export function ClimberDashboardView() {
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
       <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.25rem', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <img src="/icons/icon-192x192.png" alt="BoulderHub"
-            style={{ width: 28, height: 28, borderRadius: '0.375rem' }} />
-          ¡Bienvenido, {profile?.displayName ?? 'Escalador'}!
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.25rem', color: 'var(--color-text-primary)' }}>
+          {profile?.emoji ?? '🧗'} ¡Bienvenido, {profile?.displayName ?? 'Escalador'}!
         </h1>
         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
           BoulderHub — {blocks.length} bloque{blocks.length !== 1 ? 's' : ''} disponible{blocks.length !== 1 ? 's' : ''}
