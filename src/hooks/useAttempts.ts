@@ -2,7 +2,7 @@
 // Cache agresiva + localStorage para reducir lecturas a Firestore
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collectionGroup, query, where, getDocs, setDoc, doc, collection } from 'firebase/firestore';
+import { collectionGroup, query, where, getDocs, setDoc, doc, collection, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getSubDocs, setSubDoc } from '@/lib/firestore';
 import { useAuth } from '@/hooks/useAuth';
@@ -81,28 +81,40 @@ export function useMyAttempts() {
       const cached = getCachedAttempts(user.uid);
       if (cached) return cached;
 
-      // 2. Leer de Firestore desde users/{userId}/attempts (no necesita índice)
+      // 2. Leer de Firestore
       const map = new Map<string, Attempt>();
+
+      // 2a. Leer de users/{userId}/attempts (ruta nueva, no necesita índice)
       try {
         const snap = await getDocs(collection(db, 'users', user.uid, 'attempts'));
-        snap.forEach(d => {
+        snap.docs.forEach(d => {
           map.set(d.id, d.data() as Attempt);
         });
-      } catch (e) {
-        console.warn('Error al leer intentos del usuario:', e);
-        // Fallback: intentar via collectionGroup por si el índice ya existe
+      } catch {
+        // ignorar
+      }
+
+      // 2b. Si no hay datos en users/{userId}/attempts, intentar collectionGroup
+      //     (para migrar datos antiguos o si el usuario nunca guardó tras el fix)
+      if (map.size === 0) {
         try {
           const q = query(
             collectionGroup(db, 'attempts'),
             where('userId', '==', user.uid),
           );
           const snap = await getDocs(q);
-          snap.docs.forEach(doc => {
-            const segments = doc.ref.path.split('/');
+          const batch = writeBatch(db);
+          snap.forEach(docSnap => {
+            const segments = docSnap.ref.path.split('/');
             const blockId = segments[segments.length - 3];
-            map.set(blockId, doc.data() as Attempt);
+            const data = docSnap.data() as Attempt;
+            map.set(blockId, data);
+            // Migrar a users/{userId}/attempts/{blockId}
+            const userRef = doc(db, 'users', user.uid, 'attempts', blockId);
+            batch.set(userRef, { ...data, updatedAt: Date.now() });
           });
-        } catch { /* ignorar */ }
+          if (snap.size > 0) await batch.commit();
+        } catch { /* ignorar - collectionGroup podría no tener índice aún */ }
       }
 
       // 3. Guardar en localStorage

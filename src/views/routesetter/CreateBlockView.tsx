@@ -5,7 +5,7 @@ import { useBlock } from '@/hooks/useBlocks';
 import { uploadImageAsWebP } from '@/lib/storage';
 import { createDoc, updateDocById } from '@/lib/firestore';
 import { useWalls, useColorCategories, useRouteSetters } from '@/hooks/useStaticData';
-import { collection, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Camera, X, Save, CheckCircle, HelpCircle, AlertTriangle } from 'lucide-react';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -147,11 +147,18 @@ export function RouteSetterCreateBlockView() {
 
         await updateDocById('blocks', blockId, updates);
 
-        // Eliminar todos los intentos previos (subcolección attempts)
+        // Eliminar todos los intentos previos (subcolección attempts del bloque Y del usuario)
         const attemptsSnap = await getDocs(collection(db, 'blocks', blockId, 'attempts'));
         if (attemptsSnap.size > 0) {
           const batch = writeBatch(db);
-          attemptsSnap.forEach(d => batch.delete(d.ref));
+          attemptsSnap.forEach(d => {
+            // Borrar de blocks/{blockId}/attempts/{userId}
+            batch.delete(d.ref);
+            // También borrar de users/{userId}/attempts/{blockId}
+            const userId = d.id;
+            const userAttemptRef = doc(db, 'users', userId, 'attempts', blockId);
+            batch.delete(userAttemptRef);
+          });
           await batch.commit();
         }
       } else {
