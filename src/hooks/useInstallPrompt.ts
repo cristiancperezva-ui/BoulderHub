@@ -19,18 +19,22 @@ interface InstallPromptState {
   isInstalled: boolean;
   /** Si es iOS/Safari (no tiene beforeinstallprompt) */
   isIOS: boolean;
-  /** Si debe mostrarse el banner (no está instalado y es instalable o iOS) */
+  /** Si el dispositivo es Android */
+  isAndroid: boolean;
+  /** Si debe mostrarse el banner */
   showBanner: boolean;
   /** Dispara el prompt de instalación (solo Android/Desktop) */
-  promptInstall: () => Promise<boolean>;
-  /** Descarta el banner para no volver a mostrarlo en esta sesión */
-  dismissBanner: () => void;
+  promptInstall: () => Promise<void>;
 }
 
 function getIsIOS(): boolean {
   if (typeof window === 'undefined') return false;
-  const userAgent = navigator.userAgent || '';
-  return /iPhone|iPad|iPod/i.test(userAgent);
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function getIsAndroid(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /Android/i.test(navigator.userAgent);
 }
 
 function getIsStandalone(): boolean {
@@ -44,13 +48,12 @@ function getIsStandalone(): boolean {
 export function useInstallPrompt(): InstallPromptState {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
 
   const isIOS = getIsIOS();
+  const isAndroid = getIsAndroid();
   const isStandalone = getIsStandalone();
 
   useEffect(() => {
-    // Si ya está en modo standalone, está instalada
     if (isStandalone) {
       setIsInstalled(true);
       return;
@@ -63,14 +66,12 @@ export function useInstallPrompt(): InstallPromptState {
 
     window.addEventListener('beforeinstallprompt', handler);
 
-    // Detectar si se instaló después
     const onAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
     };
     window.addEventListener('appinstalled', onAppInstalled);
 
-    // Detectar cambios en display-mode (instalación desde iOS)
     const mediaQuery = window.matchMedia('(display-mode: standalone)');
     const onChange = (e: MediaQueryListEvent) => {
       if (e.matches) setIsInstalled(true);
@@ -85,32 +86,26 @@ export function useInstallPrompt(): InstallPromptState {
   }, [isStandalone]);
 
   const isInstallable = deferredPrompt !== null;
-  const showBanner = !isInstalled && !dismissed && (isInstallable || isIOS);
 
-  const promptInstall = useCallback(async (): Promise<boolean> => {
-    if (!deferredPrompt) return false;
+  // Mostrar banner si NO está instalada (en cualquier plataforma)
+  const showBanner = !isInstalled;
 
+  const promptInstall = useCallback(async () => {
+    if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     setDeferredPrompt(null);
-
     if (outcome === 'accepted') {
       setIsInstalled(true);
-      return true;
     }
-    return false;
   }, [deferredPrompt]);
-
-  const dismissBanner = useCallback(() => {
-    setDismissed(true);
-  }, []);
 
   return {
     isInstallable,
     isInstalled,
     isIOS,
+    isAndroid,
     showBanner,
     promptInstall,
-    dismissBanner,
   };
 }

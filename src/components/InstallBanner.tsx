@@ -1,37 +1,38 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, X } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { Smartphone, X, Download } from 'lucide-react';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 
 export function InstallBanner() {
-  const { showBanner, isIOS, promptInstall, dismissBanner } = useInstallPrompt();
+  const { user } = useAuth();
+  const { isInstalled, isInstallable, isIOS, isAndroid, promptInstall } = useInstallPrompt();
   const [visible, setVisible] = useState(false);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
+  // Mostrar banner cuando el usuario inicia sesión (si no está instalada)
   useEffect(() => {
-    if (showBanner) {
-      // Pequeño delay para que aparezca después de cargar la página
-      const timer = setTimeout(() => setVisible(true), 2000);
+    if (user && !isInstalled) {
+      const timer = setTimeout(() => setVisible(true), 1500);
       return () => clearTimeout(timer);
     }
-    setVisible(false);
-  }, [showBanner]);
+    if (isInstalled) {
+      setVisible(false);
+    }
+  }, [user, isInstalled]);
 
-  if (!visible) return null;
+  // Si no hay usuario logueado o ya está instalada, no mostrar nada
+  if (!user || isInstalled || !visible) return null;
 
   const handleDismiss = () => {
     setIsAnimatingOut(true);
     setTimeout(() => {
       setVisible(false);
       setIsAnimatingOut(false);
-      dismissBanner();
     }, 300);
   };
 
   const handleInstall = async () => {
-    const installed = await promptInstall();
-    if (installed) {
-      setVisible(false);
-    }
+    await promptInstall();
   };
 
   return (
@@ -58,14 +59,15 @@ export function InstallBanner() {
             <h3 className="font-semibold text-gray-900 text-sm">
               Instala BoulderHub
             </h3>
+            <p className="mt-1 text-xs text-gray-600 leading-relaxed">
+              Accede más rápido desde tu pantalla de inicio con una experiencia tipo app nativa.
+            </p>
 
             {isIOS ? (
-              <div className="mt-2">
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Agrega BoulderHub a tu pantalla de inicio para usarlo como una app nativa:
-                </p>
-                <ol className="mt-2 space-y-1 text-xs text-gray-600 list-decimal list-inside">
-                  <li>Toca el botón <strong>Compartir</strong> <span className="text-sm">⎙</span></li>
+              /* ── iOS: solo instructivo manual ── */
+              <div className="mt-3">
+                <ol className="space-y-1.5 text-xs text-gray-600 list-decimal list-inside">
+                  <li>Toca el botón <strong>Compartir</strong> <span className="text-sm">⎙</span> en Safari</li>
                   <li>Desplázate y selecciona <strong>"Agregar a pantalla de inicio"</strong></li>
                   <li>Confirma tocando <strong>"Agregar"</strong></li>
                 </ol>
@@ -76,16 +78,35 @@ export function InstallBanner() {
                   Entendido
                 </button>
               </div>
-            ) : (
-              <div className="mt-2">
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Instala la app en tu dispositivo para un acceso más rápido y una experiencia mejorada.
-                </p>
+            ) : isInstallable ? (
+              /* ── Android/Desktop: botón de instalación nativo ── */
+              <div className="mt-3">
                 <button
                   onClick={handleInstall}
-                  className="mt-3 w-full py-2.5 px-4 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 active:bg-purple-800 transition-colors shadow-lg shadow-purple-200"
+                  className="w-full py-2.5 px-4 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 active:bg-purple-800 transition-colors shadow-lg shadow-purple-200"
                 >
+                  <Download size={16} className="inline mr-1.5" style={{ verticalAlign: 'middle' }} />
                   Instalar app
+                </button>
+                <p className="mt-1.5 text-xs text-gray-400 text-center">
+                  También puedes instalarla desde el menú del navegador
+                </p>
+              </div>
+            ) : (
+              /* ── Android/Desktop sin beforeinstallprompt: instructivo manual ── */
+              <div className="mt-3">
+                <p className="text-xs text-gray-600 leading-relaxed mb-2">
+                  {isAndroid ? (
+                    <>Abre Chrome, toca los tres puntos <strong>⁝</strong> y selecciona <strong>"Instalar app"</strong> o <strong>"Agregar a pantalla de inicio"</strong>.</>
+                  ) : (
+                    <>En Chrome o Edge, haz clic en el icono de instalación <Download size={12} className="inline" /> en la barra de direcciones o en el menú <strong>⋮</strong> → <strong>"Instalar BoulderHub"</strong>.</>
+                  )}
+                </p>
+                <button
+                  onClick={handleDismiss}
+                  className="w-full py-2 px-4 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 active:bg-purple-800 transition-colors"
+                >
+                  Entendido
                 </button>
               </div>
             )}
