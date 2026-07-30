@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Mountain, Search, X, ChevronDown } from 'lucide-react';
 import { useActiveBlocks } from '@/hooks/useBlocks';
 import { useMyAttempts } from '@/hooks/useAttempts';
@@ -10,8 +10,27 @@ type StatusFilter = 'all' | 'realizados' | 'sin_realizar' | 'proyecto';
 const PAGE_SIZE = 20;
 
 export function ClimberBlocksView() {
-  const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Leer filtros desde URL search params (persisten al navegar)
+  const search = searchParams.get('q') ?? '';
+  const selectedColors = searchParams.get('colors')?.split(',').filter(Boolean) ?? [];
+  const selectedGrades = searchParams.get('grades')?.split(',').map(Number).filter(n => !isNaN(n)) ?? [];
+  const statusFilter = (searchParams.get('status') as StatusFilter) ?? 'all';
+  const sort = (searchParams.get('sort') as 'newest' | 'difficulty' | 'rating') ?? 'newest';
+
+  // Helper para actualizar un filtro en la URL sin perder los demás
+  const setFilter = (key: string, value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (!value || value === 'all' || value === 'newest') {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    setSearchParams(next, { replace: true });
+    setVisibleCount(PAGE_SIZE); // resetear paginación al cambiar filtros
+  };
 
   // ✅ 1 sola query cacheada 10 min para TODOS los bloques activos
   const { data: blocks = [], isLoading } = useActiveBlocks();
@@ -20,11 +39,6 @@ export function ClimberBlocksView() {
   const { data: userAttempts = new Map<string, Attempt>() } = useMyAttempts();
 
   // Filter state (todo en cliente porque los datos ya están cacheados)
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [selectedGrades, setSelectedGrades] = useState<number[]>([]);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sort, setSort] = useState<'newest' | 'difficulty' | 'rating'>('newest');
-
   const allColors = useMemo(() => [...new Set(blocks.map(b => b.categoryColorName).filter(Boolean))], [blocks]);
   const gradeRange = useMemo(() => {
     const hasUnknown = blocks.some(b => b.proposedDifficultyUnknown);
@@ -38,10 +52,16 @@ export function ClimberBlocksView() {
   }, [blocks]);
 
   const toggleColor = (color: string) => {
-    setSelectedColors(prev => prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color]);
+    const next = selectedColors.includes(color)
+      ? selectedColors.filter(c => c !== color)
+      : [...selectedColors, color];
+    setFilter('colors', next.length > 0 ? next.join(',') : null);
   };
   const toggleGrade = (g: number) => {
-    setSelectedGrades(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+    const next = selectedGrades.includes(g)
+      ? selectedGrades.filter(x => x !== g)
+      : [...selectedGrades, g];
+    setFilter('grades', next.length > 0 ? next.join(',') : null);
   };
 
   const filtered = useMemo(() => {
@@ -90,7 +110,7 @@ export function ClimberBlocksView() {
         border: '1px solid var(--color-border-default)', borderRadius: '0.5rem',
       }}>
         <Search size={18} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
+        <input value={search} onChange={(e) => setFilter('q', e.target.value || null)}
           placeholder="Buscar por muro, routesetter..."
           style={{ flex: 1, background: 'none', border: 'none', color: 'var(--color-text-primary)', fontSize: '0.9rem', outline: 'none' }}
         />
@@ -118,7 +138,7 @@ export function ClimberBlocksView() {
               );
             })}
             {selectedColors.length > 0 && (
-              <button onClick={() => setSelectedColors([])}
+              <button onClick={() => setFilter('colors', null)}
                 style={{ padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem',
                   background: 'transparent', color: 'var(--color-text-muted)',
                   border: '1px dashed var(--color-border-default)', cursor: 'pointer' }}>
@@ -152,7 +172,7 @@ export function ClimberBlocksView() {
               );
             })}
             {selectedGrades.length > 0 && (
-              <button onClick={() => setSelectedGrades([])}
+              <button onClick={() => setFilter('grades', null)}
                 style={{ padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem',
                   background: 'transparent', color: 'var(--color-text-muted)',
                   border: '1px dashed var(--color-border-default)', cursor: 'pointer' }}>
@@ -173,7 +193,7 @@ export function ClimberBlocksView() {
             { k: 'proyecto' as StatusFilter, l: 'En proyecto 🎯', icon: '🎯' },
             { k: 'sin_realizar' as StatusFilter, l: 'Sin realizar', icon: '⬜' },
           ]).map(({ k, l, icon }) => (
-            <button key={k} onClick={() => setStatusFilter(k)}
+            <button key={k} onClick={() => setFilter('status', k)}
               style={{
                 padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem',
                 fontWeight: statusFilter === k ? 600 : 400,
@@ -192,7 +212,7 @@ export function ClimberBlocksView() {
       {/* Sort tabs */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
         {([{ k: 'newest', l: '🕐 Más nuevos' }, { k: 'difficulty', l: '📈 Dificultad' }, { k: 'rating', l: '⭐ Mejor rating' }] as const).map(({ k, l }) => (
-          <button key={k} onClick={() => setSort(k)}
+          <button key={k} onClick={() => setFilter('sort', k)}
             style={{
               padding: '0.375rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem',
               background: sort === k ? 'var(--color-accent-primary)' : 'var(--color-bg-surface)',
