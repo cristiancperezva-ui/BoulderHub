@@ -5,7 +5,6 @@ import { useBlock } from '@/hooks/useBlocks';
 import { uploadImageAsWebP } from '@/lib/storage';
 import { createDoc, updateDocById } from '@/lib/firestore';
 import { useWalls, useColorCategories, useRouteSetters } from '@/hooks/useStaticData';
-import type { Block } from '@/types';
 import { Camera, X, Save, CheckCircle, HelpCircle } from 'lucide-react';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 
@@ -115,7 +114,7 @@ export function RouteSetterCreateBlockView() {
 
       if (isEditing && blockId) {
         // ─── MODO EDICIÓN ───
-        const updates: Partial<Block> = {
+        const updates: Record<string, unknown> = {
           wallId: wall,
           wallName: wallObj?.name ?? wall,
           routeSetterId: selectedRouteSetterId || user.uid,
@@ -125,13 +124,13 @@ export function RouteSetterCreateBlockView() {
           categoryColorName: catObj?.name ?? category,
           holdColors,
           proposedDifficultyV: difficulty,
-          proposedDifficultyUnknown: difficulty === 0 || undefined,
           comments,
         };
-        await updateDocById<Block>('blocks', blockId, updates);
+        if (difficulty === 0) updates.proposedDifficultyUnknown = true;
+        await updateDocById('blocks', blockId, updates);
       } else {
         // ─── MODO CREACIÓN ───
-        const newBlock: Partial<Block> = {
+        const newBlock: Record<string, unknown> = {
           wallId: wall,
           wallName: wallObj?.name ?? wall,
           routeSetterId: selectedRouteSetterId || user.uid,
@@ -141,7 +140,6 @@ export function RouteSetterCreateBlockView() {
           categoryColorName: catObj?.name ?? category,
           holdColors,
           proposedDifficultyV: difficulty,
-          proposedDifficultyUnknown: difficulty === 0 || undefined,
           comments,
           active: true,
           avgRating: 0,
@@ -150,7 +148,8 @@ export function RouteSetterCreateBlockView() {
           encadenadoCount: 0,
           proyectoCount: 0,
         };
-        await createDoc<Block>('blocks', newBlock);
+        if (difficulty === 0) newBlock.proposedDifficultyUnknown = true;
+        await createDoc('blocks', newBlock);
       }
 
       setUploadProgress(1);
