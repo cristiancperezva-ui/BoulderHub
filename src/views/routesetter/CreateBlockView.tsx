@@ -1,29 +1,40 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useBlock } from '@/hooks/useBlocks';
 import { uploadImageAsWebP } from '@/lib/storage';
-import { createDoc } from '@/lib/firestore';
+import { createDoc, updateDocById } from '@/lib/firestore';
 import { useWalls, useColorCategories, useRouteSetters } from '@/hooks/useStaticData';
 import type { Block } from '@/types';
-import { Camera, X, Save, CheckCircle } from 'lucide-react';
+import { Camera, X, Save, CheckCircle, HelpCircle } from 'lucide-react';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 
 export function RouteSetterCreateBlockView() {
+  const { blockId } = useParams<{ blockId: string }>();
+  const navigate = useNavigate();
+  const isEditing = !!blockId;
   const { user, profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Cargar datos del bloque si estamos editando
+  const { data: existingBlock } = useBlock(isEditing ? blockId : undefined);
+
   const [photo, setPhoto] = useState<{ file: File; preview: string } | null>(null);
+  const [existingPhotoUrl, setExistingPhotoUrl] = useState<string>('');
   const [wall, setWall] = useState('');
   const [category, setCategory] = useState('');
   const [holdColors, setHoldColors] = useState<string[]>([]);
   const [difficulty, setDifficulty] = useState(6);
+  const [difficultyUnknown, setDifficultyUnknown] = useState(false);
   const [comments, setComments] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadLabel, setUploadLabel] = useState('');
   const [newHoldColor, setNewHoldColor] = useState('#E87D3E');
+  const [errors, setErrors] = useState<string[]>([]);
 
-  // ✅ Datos cacheados con TanStack Query (30 min walls/categories, 10 min routesetters)
+  // ✅ Datos cacheados con TanStack Query
   const { data: walls = [] } = useWalls();
   const { data: categories = [] } = useColorCategories();
   const { data: routesetters = [] } = useRouteSetters();
@@ -36,6 +47,20 @@ export function RouteSetterCreateBlockView() {
     setSelectedRouteSetterId(found?.id ?? routesetters[0]?.id ?? '');
     isRoutesetterInitialized.current = true;
   }
+
+  // Pre-cargar datos del bloque existente cuando se carga
+  useEffect(() => {
+    if (existingBlock && isEditing) {
+      setWall(existingBlock.wallId || '');
+      setCategory(existingBlock.categoryColorId || '');
+      setHoldColors(existingBlock.holdColors || []);
+      setDifficulty(existingBlock.proposedDifficultyV || 6);
+      setDifficultyUnknown(existingBlock.proposedDifficultyUnknown || false);
+      setComments(existingBlock.comments || '');
+      setExistingPhotoUrl(existingBlock.photoUrl || '');
+      setSelectedRouteSetterId(existingBlock.routeSetterId || '');
+    }
+  }, [existingBlock, isEditing]);
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,68 +78,109 @@ export function RouteSetterCreateBlockView() {
     setHoldColors(prev => prev.filter(c => c !== color));
   };
 
+  const validate = (): boolean => {
+    const errs: string[] = [];
+    if (!photo && !existingPhotoUrl) errs.push('Foto del bloque');
+    if (!wall) errs.push('Muro');
+    if (!category) errs.push('Categoría de color');
+    if (holdColors.length === 0) errs.push('Colores de las presas');
+    setErrors(errs);
+    return errs.length === 0;
+  };
+
   const handleSubmit = async () => {
-    if (!photo || !wall || !category || !user) return;
+    if (!validate() || !user) return;
     setSaving(true);
     setUploadProgress(0);
     setUploadLabel('Preparando...');
     try {
-      // Subir foto como WebP (con progreso)
       const wallObj = walls.find(w => w.id === wall);
       const catObj = categories.find(c => c.id === category);
-      const blockId = crypto.randomUUID();
-      const photoPath = `blocks/${blockId}`;
 
-      setUploadLabel('Optimizando imagen...');
-      const photoUrl = await uploadImageAsWebP(photo.file, photoPath, (pct, label) => {
-        setUploadProgress(pct);
-        if (label) setUploadLabel(label);
-      });
+      let photoUrl = existingPhotoUrl;
 
-      setUploadLabel('Guardando en la base de datos...');
+      // Subir nueva foto si se cambió
+      if (photo) {
+        const targetBlockId = isEditing ? blockId! : crypto.randomUUID();
+        const photoPath = `blocks/${targetBlockId}`;
+        setUploadLabel('Optimizando imagen...');
+        photoUrl = await uploadImageAsWebP(photo.file, photoPath, (pct, label) => {
+          setUploadProgress(pct);
+          if (label) setUploadLabel(label);
+        });
+      }
+
+      setUploadLabel(isEditing ? 'Actualizando...' : 'Guardando en la base de datos...');
       setUploadProgress(0.9);
 
-      // Guardar en Firestore
       const selectedRSetter = routesetters.find(r => r.id === selectedRouteSetterId);
-      const newBlock: Partial<Block> = {
-        wallId: wall,
-        wallName: wallObj?.name ?? wall,
-        routeSetterId: selectedRouteSetterId || user.uid,
-        routeSetterName: selectedRSetter?.displayName ?? profile?.displayName ?? 'RouteSetter',
-        photoUrl,
-        categoryColorId: category,
-        categoryColorName: catObj?.name ?? category,
-        holdColors,
-        proposedDifficultyV: difficulty,
-        comments,
-        active: true,
-        avgRating: 0,
-        totalAttempts: 0,
-        flashCount: 0,
-        encadenadoCount: 0,
-        proyectoCount: 0,
-      };
-      await createDoc<Block>('blocks', newBlock);
+
+      if (isEditing && blockId) {
+        // ─── MODO EDICIÓN ───
+        const updates: Partial<Block> = {
+          wallId: wall,
+          wallName: wallObj?.name ?? wall,
+          routeSetterId: selectedRouteSetterId || user.uid,
+          routeSetterName: selectedRSetter?.displayName ?? existingBlock?.routeSetterName ?? profile?.displayName ?? 'RouteSetter',
+          photoUrl,
+          categoryColorId: category,
+          categoryColorName: catObj?.name ?? category,
+          holdColors,
+          proposedDifficultyV: difficultyUnknown ? 0 : difficulty,
+          proposedDifficultyUnknown: difficultyUnknown || undefined,
+          comments,
+        };
+        await updateDocById<Block>('blocks', blockId, updates);
+      } else {
+        // ─── MODO CREACIÓN ───
+        const newBlock: Partial<Block> = {
+          wallId: wall,
+          wallName: wallObj?.name ?? wall,
+          routeSetterId: selectedRouteSetterId || user.uid,
+          routeSetterName: selectedRSetter?.displayName ?? profile?.displayName ?? 'RouteSetter',
+          photoUrl,
+          categoryColorId: category,
+          categoryColorName: catObj?.name ?? category,
+          holdColors,
+          proposedDifficultyV: difficultyUnknown ? 0 : difficulty,
+          proposedDifficultyUnknown: difficultyUnknown || undefined,
+          comments,
+          active: true,
+          avgRating: 0,
+          totalAttempts: 0,
+          flashCount: 0,
+          encadenadoCount: 0,
+          proyectoCount: 0,
+        };
+        await createDoc<Block>('blocks', newBlock);
+      }
 
       setUploadProgress(1);
-      setUploadLabel('¡Publicado!');
+      setUploadLabel('¡Guardado!');
       setSaved(true);
-      // Reset form
-      setPhoto(null);
-      setWall('');
-      setCategory('');
-      setHoldColors([]);
-      setDifficulty(6);
-      setComments('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+
+      if (!isEditing) {
+        // Reset form solo en creación
+        setPhoto(null);
+        setWall('');
+        setCategory('');
+        setHoldColors([]);
+        setDifficulty(6);
+        setDifficultyUnknown(false);
+        setComments('');
+        setExistingPhotoUrl('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+
       setTimeout(() => {
         setSaved(false);
         setUploadProgress(0);
         setUploadLabel('');
-      }, 3000);
+        if (isEditing) navigate('/routesetter/blocks');
+      }, 2000);
     } catch (err) {
-      console.error('Error al publicar bloque:', err);
-      alert('Error al publicar el bloque. Revisa la consola para más detalles.');
+      console.error('Error al guardar bloque:', err);
+      alert('Error al guardar el bloque. Revisa la consola para más detalles.');
     } finally {
       setSaving(false);
     }
@@ -124,9 +190,14 @@ export function RouteSetterCreateBlockView() {
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out', maxWidth: 640, margin: '0 auto' }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--color-text-primary)' }}>
-        Nuevo Bloque
+      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--color-text-primary)' }}>
+        {isEditing ? 'Editar Bloque' : 'Nuevo Bloque'}
       </h1>
+      {isEditing && (
+        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+          Editando bloque · {existingBlock?.wallName || ''} · V{existingBlock?.proposedDifficultyV || '?'}
+        </p>
+      )}
 
       {saved && (
         <div style={{
@@ -139,7 +210,24 @@ export function RouteSetterCreateBlockView() {
           fontSize: '0.9rem',
         }}>
           <CheckCircle size={18} />
-          ¡Bloque publicado exitosamente!
+          {isEditing ? '¡Bloque actualizado exitosamente!' : '¡Bloque publicado exitosamente!'}
+        </div>
+      )}
+
+      {/* Errores de validación */}
+      {errors.length > 0 && (
+        <div style={{
+          padding: '0.75rem 1rem', marginBottom: '1rem',
+          background: 'rgba(216,76,76,0.1)',
+          border: '1px solid rgba(216,76,76,0.3)',
+          borderRadius: '0.5rem',
+          color: 'var(--color-state-error)',
+          fontSize: '0.85rem',
+        }}>
+          <strong>Campos requeridos faltantes:</strong>
+          <ul style={{ margin: '0.375rem 0 0 1.25rem', padding: 0 }}>
+            {errors.map(e => <li key={e}>{e}</li>)}
+          </ul>
         </div>
       )}
 
@@ -157,16 +245,16 @@ export function RouteSetterCreateBlockView() {
           <label style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'block' }}>
             Foto del bloque *
           </label>
-          {photo ? (
+          {photo || existingPhotoUrl ? (
             <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
               <img
-                src={photo.preview}
+                src={photo?.preview || existingPhotoUrl}
                 alt="Preview"
                 loading="lazy"
                 style={{ width: '100%', maxHeight: 300, borderRadius: '0.5rem', objectFit: 'cover' }}
               />
               <button
-                onClick={() => { setPhoto(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                onClick={() => { setPhoto(null); setExistingPhotoUrl(''); if (fileInputRef.current) fileInputRef.current.value = ''; }}
                 style={{
                   position: 'absolute', top: 8, right: 8,
                   background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
@@ -177,7 +265,7 @@ export function RouteSetterCreateBlockView() {
                 <X size={18} />
               </button>
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                Se convertirá a WebP automáticamente
+                {isEditing ? 'Toca el botón ✕ y selecciona una nueva foto para cambiarla' : 'Se convertirá a WebP automáticamente'}
               </p>
             </div>
           ) : (
@@ -214,7 +302,8 @@ export function RouteSetterCreateBlockView() {
               style={{
                 width: '100%', padding: '0.75rem 1rem',
                 background: 'var(--color-bg-base)',
-                border: '1px solid var(--color-border-default)', borderRadius: '0.5rem',
+                border: `1px solid ${!wall ? 'var(--color-state-error)' : 'var(--color-border-default)'}`,
+                borderRadius: '0.5rem',
                 color: wall ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
                 fontSize: '0.9rem', outline: 'none',
               }}
@@ -238,7 +327,8 @@ export function RouteSetterCreateBlockView() {
             style={{
               width: '100%', padding: '0.75rem 1rem',
               background: 'var(--color-bg-base)',
-              border: '1px solid var(--color-border-default)', borderRadius: '0.5rem',
+              border: `1px solid ${!category ? 'var(--color-state-error)' : 'var(--color-border-default)'}`,
+              borderRadius: '0.5rem',
               color: category ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
               fontSize: '0.9rem', outline: 'none',
             }}
@@ -291,13 +381,12 @@ export function RouteSetterCreateBlockView() {
         {/* Colores de presas - Selector por paleta */}
         <div>
           <label style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'block' }}>
-            Colores de las presas
+            Colores de las presas *
           </label>
 
-          {/* Selector de color canvas-based (funciona en PC y móvil) */}
           <div style={{
             background: 'var(--color-bg-base)',
-            border: '1px solid var(--color-border-subtle)',
+            border: `1px solid ${holdColors.length === 0 && errors.includes('Colores de las presas') ? 'var(--color-state-error)' : 'var(--color-border-subtle)'}`,
             borderRadius: '0.5rem',
             padding: '1rem',
             marginBottom: '0.75rem',
@@ -305,7 +394,6 @@ export function RouteSetterCreateBlockView() {
             <ColorPicker value={newHoldColor} onChange={(c) => setNewHoldColor(c)} />
           </div>
 
-          {/* Botón agregar */}
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem' }}>
             <button
               onClick={addHoldColor}
@@ -321,7 +409,6 @@ export function RouteSetterCreateBlockView() {
             </button>
           </div>
 
-          {/* Colores seleccionados */}
           {holdColors.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {holdColors.map((color) => (
@@ -353,16 +440,67 @@ export function RouteSetterCreateBlockView() {
           <label style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'block' }}>
             Dificultad propuesta *
           </label>
-          <input
-            type="range" min={1} max={14} value={difficulty}
-            onChange={(e) => setDifficulty(Number(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--color-accent-primary)' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-            <span>V1</span>
-            <span style={{ fontWeight: 700, fontSize: '1.125rem', color: 'var(--color-accent-primary)' }}>V{difficulty}</span>
-            <span>V14</span>
+
+          {/* Toggle: V definido / V? desconocido */}
+          <div style={{
+            display: 'flex', gap: '0.5rem', marginBottom: '0.75rem',
+          }}>
+            <button
+              type="button"
+              onClick={() => setDifficultyUnknown(false)}
+              style={{
+                flex: 1, padding: '0.625rem 1rem',
+                background: !difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-bg-base)',
+                color: !difficultyUnknown ? 'var(--color-text-inverse)' : 'var(--color-text-secondary)',
+                border: `1px solid ${!difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-border-default)'}`,
+                borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
+                transition: 'all 0.2s',
+              }}
+            >
+              V1 – V14
+            </button>
+            <button
+              type="button"
+              onClick={() => setDifficultyUnknown(true)}
+              style={{
+                flex: 1, padding: '0.625rem 1rem',
+                background: difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-bg-base)',
+                color: difficultyUnknown ? 'var(--color-text-inverse)' : 'var(--color-text-secondary)',
+                border: `1px solid ${difficultyUnknown ? 'var(--color-accent-primary)' : 'var(--color-border-default)'}`,
+                borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
+                transition: 'all 0.2s',
+              }}
+            >
+              <HelpCircle size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.25rem' }} />
+              V? No estoy seguro
+            </button>
           </div>
+
+          {!difficultyUnknown ? (
+            <>
+              <input
+                type="range" min={1} max={14} value={difficulty}
+                onChange={(e) => setDifficulty(Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--color-accent-primary)' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                <span>V1</span>
+                <span style={{ fontWeight: 700, fontSize: '1.125rem', color: 'var(--color-accent-primary)' }}>V{difficulty}</span>
+                <span>V14</span>
+              </div>
+            </>
+          ) : (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+              padding: '1rem', background: 'var(--color-bg-base)', borderRadius: '0.5rem',
+              border: '1px dashed var(--color-border-default)',
+            }}>
+              <HelpCircle size={20} style={{ color: 'var(--color-text-muted)' }} />
+              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                Dificultad sin definir — los escaladores podrán proponer su propia valoración
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Comentarios */}
@@ -406,22 +544,39 @@ export function RouteSetterCreateBlockView() {
           </div>
         )}
 
-        {/* Submit */}
-        <button
-          onClick={handleSubmit}
-          disabled={!photo || !wall || !category || saving}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-            padding: '0.875rem 1.5rem', width: '100%',
-            background: (!photo || !wall || !category || saving) ? 'var(--color-bg-hover)' : 'var(--color-accent-primary)',
-            color: (!photo || !wall || !category || saving) ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
-            border: 'none', borderRadius: '0.5rem', fontWeight: 600, fontSize: '1rem',
-            cursor: (!photo || !wall || !category || saving) ? 'not-allowed' : 'pointer',
-          }}
-        >
-          <Save size={18} />
-          {saving ? uploadLabel || 'Publicando...' : 'Publicar Bloque'}
-        </button>
+        {/* Botones */}
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          {isEditing && (
+            <button
+              onClick={() => navigate('/routesetter/blocks')}
+              style={{
+                padding: '0.875rem 1.5rem',
+                background: 'var(--color-bg-base)',
+                color: 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border-default)',
+                borderRadius: '0.5rem', fontWeight: 600, fontSize: '1rem',
+                cursor: 'pointer',
+              }}
+            >
+              Cancelar
+            </button>
+          )}
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+              padding: '0.875rem 1.5rem', flex: 1,
+              background: saving ? 'var(--color-bg-hover)' : 'var(--color-accent-primary)',
+              color: saving ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
+              border: 'none', borderRadius: '0.5rem', fontWeight: 600, fontSize: '1rem',
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <Save size={18} />
+            {saving ? uploadLabel || 'Guardando...' : isEditing ? 'Guardar Cambios' : 'Publicar Bloque'}
+          </button>
+        </div>
       </div>
     </div>
   );

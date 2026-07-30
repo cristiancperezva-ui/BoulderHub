@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useAllBlocks } from '@/hooks/useBlocks';
 import { updateDocById } from '@/lib/firestore';
 import { formatBlockDate } from '@/lib/scoring';
 import type { Block, FirestoreDoc } from '@/types';
-import { Mountain, Eye, EyeOff, Search, Clock, TrendingUp, Star, Filter } from 'lucide-react';
+import { Mountain, Eye, EyeOff, Search, Clock, TrendingUp, Star, Filter, Edit3, HelpCircle } from 'lucide-react';
 
 type SortKey = 'newest' | 'oldest' | 'difficulty' | 'rating';
 
@@ -198,6 +199,8 @@ export function RouteSetterMyBlocksView() {
 
 /** Fila individual de bloque (reutilizada para activos e históricos) */
 function BlockRow({ block, onToggle }: { block: FirestoreDoc<Block>; onToggle: (id: string, active: boolean) => void }) {
+  const navigate = useNavigate();
+  const isUnknown = block.proposedDifficultyUnknown;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: '1rem',
@@ -230,9 +233,15 @@ function BlockRow({ block, onToggle }: { block: FirestoreDoc<Block>; onToggle: (
           </span>
           <span style={{
             fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
-            background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600,
+            background: isUnknown ? 'rgba(108,108,108,0.15)' : 'rgba(232,125,62,0.15)',
+            color: isUnknown ? 'var(--color-text-muted)' : 'var(--color-accent-primary)',
+            fontWeight: 600,
           }}>
-            V{block.proposedDifficultyV}
+            {isUnknown ? (
+              <><HelpCircle size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.125rem' }} />V?</>
+            ) : (
+              <>V{block.proposedDifficultyV}</>
+            )}
           </span>
           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
             {block.categoryColorName}
@@ -251,6 +260,19 @@ function BlockRow({ block, onToggle }: { block: FirestoreDoc<Block>; onToggle: (
       </div>
 
       {/* Acciones */}
+      <button onClick={() => navigate(`/routesetter/blocks/edit/${block.id}`)}
+        title="Editar bloque"
+        style={{
+          display: 'flex', alignItems: 'center', gap: '0.375rem',
+          padding: '0.5rem 0.75rem',
+          background: 'rgba(134,59,255,0.1)',
+          color: 'var(--color-accent-primary)',
+          border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0,
+        }}
+      >
+        <Edit3 size={14} />
+        Editar
+      </button>
       <button onClick={() => onToggle(block.id, block.active)}
         title={block.active ? 'Deshabilitar bloque' : 'Habilitar bloque'}
         style={{

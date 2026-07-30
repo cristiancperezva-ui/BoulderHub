@@ -150,10 +150,12 @@ export function ClimberBlockDetailView() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🔧 Grado routesetter:</span>
                 <span style={{
-                  fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-accent-primary)',
-                  background: 'rgba(232,125,62,0.1)', padding: '0.25rem 0.75rem', borderRadius: '0.5rem',
+                  fontSize: '1.25rem', fontWeight: 700,
+                  color: block.proposedDifficultyUnknown ? 'var(--color-text-muted)' : 'var(--color-accent-primary)',
+                  background: block.proposedDifficultyUnknown ? 'rgba(108,108,108,0.1)' : 'rgba(232,125,62,0.1)',
+                  padding: '0.25rem 0.75rem', borderRadius: '0.5rem',
                 }}>
-                  V{block.proposedDifficultyV}
+                  {block.proposedDifficultyUnknown ? 'V?' : `V${block.proposedDifficultyV}`}
                 </span>
               </div>
 

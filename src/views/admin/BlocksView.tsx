@@ -116,8 +116,10 @@ export function AdminBlocksView() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.85rem' }}>{block.wallName}</span>
                     <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
-                      background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600 }}>
-                      V{block.proposedDifficultyV}
+                      background: block.proposedDifficultyUnknown ? 'rgba(108,108,108,0.15)' : 'rgba(232,125,62,0.15)',
+                      color: block.proposedDifficultyUnknown ? 'var(--color-text-muted)' : 'var(--color-accent-primary)',
+                      fontWeight: 600 }}>
+                      {block.proposedDifficultyUnknown ? 'V?' : `V${block.proposedDifficultyV}`}
                     </span>
                     <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
                       background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)', fontWeight: 500 }}>

@@ -196,8 +196,10 @@ export function ClimberChallengeDetailView() {
                             {block.wallName}
                           </span>
                           <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
-                            background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600 }}>
-                            V{block.proposedDifficultyV}
+                            background: block.proposedDifficultyUnknown ? 'rgba(108,108,108,0.15)' : 'rgba(232,125,62,0.15)',
+                            color: block.proposedDifficultyUnknown ? 'var(--color-text-muted)' : 'var(--color-accent-primary)',
+                            fontWeight: 600 }}>
+                            {block.proposedDifficultyUnknown ? 'V?' : `V${block.proposedDifficultyV}`}
                           </span>
                           {block.active === false && (
                             <span style={{ fontSize: '0.65rem', padding: '0.125rem 0.375rem', borderRadius: '999px',

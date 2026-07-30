@@ -27,11 +27,14 @@ export function ClimberBlocksView() {
 
   const allColors = useMemo(() => [...new Set(blocks.map(b => b.categoryColorName).filter(Boolean))], [blocks]);
   const gradeRange = useMemo(() => {
+    const hasUnknown = blocks.some(b => b.proposedDifficultyUnknown);
     const grades = blocks.map(b => b.proposedDifficultyV).filter(Boolean);
-    if (grades.length === 0) return [];
+    if (grades.length === 0 && !hasUnknown) return [];
     const min = Math.min(...grades);
     const max = Math.max(...grades);
-    return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+    const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+    if (hasUnknown) range.unshift(0);
+    return range;
   }, [blocks]);
 
   const toggleColor = (color: string) => {
@@ -133,17 +136,18 @@ export function ClimberBlocksView() {
           <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
             {gradeRange.map(g => {
               const active = selectedGrades.includes(g);
+              const isUnknown = g === 0;
               return (
                 <button key={g} onClick={() => toggleGrade(g)}
                   style={{
                     padding: '0.375rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: active ? 600 : 400,
                     background: active ? 'var(--color-accent-primary)' : 'var(--color-bg-surface)',
-                    color: active ? 'var(--color-text-inverse)' : 'var(--color-text-secondary)',
+                    color: active ? 'var(--color-text-inverse)' : isUnknown ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
                     border: `1px solid ${active ? 'var(--color-accent-primary)' : 'var(--color-border-default)'}`,
                     cursor: 'pointer',
                   }}
                 >
-                  V{g} {active && <X size={12} style={{ marginLeft: '0.25rem', display: 'inline' }} />}
+                  {isUnknown ? 'V?' : `V${g}`} {active && <X size={12} style={{ marginLeft: '0.25rem', display: 'inline' }} />}
                 </button>
               );
             })}
@@ -290,8 +294,10 @@ function BlockCard({ block, userAttempt }: { block: FirestoreDoc<Block>; userAtt
               🧱 {block.wallName}
             </span>
             <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
-              background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600 }}>
-              V{block.proposedDifficultyV}
+              background: block.proposedDifficultyUnknown ? 'rgba(108,108,108,0.15)' : 'rgba(232,125,62,0.15)',
+              color: block.proposedDifficultyUnknown ? 'var(--color-text-muted)' : 'var(--color-accent-primary)',
+              fontWeight: 600 }}>
+              {block.proposedDifficultyUnknown ? 'V?' : `V${block.proposedDifficultyV}`}
             </span>
             <span style={{ fontSize: '0.7rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
               background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)', fontWeight: 500 }}>

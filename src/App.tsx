@@ -110,6 +110,7 @@ export default function App() {
         >
           <Route path="/routesetter/dashboard" element={<Suspense fallback={<PageFallback />}><RouteSetterDashboardView /></Suspense>} />
           <Route path="/routesetter/blocks/create" element={<Suspense fallback={<PageFallback />}><RouteSetterCreateBlockView /></Suspense>} />
+          <Route path="/routesetter/blocks/edit/:blockId" element={<Suspense fallback={<PageFallback />}><RouteSetterCreateBlockView /></Suspense>} />
           <Route path="/routesetter/blocks" element={<Suspense fallback={<PageFallback />}><RouteSetterMyBlocksView /></Suspense>} />
           <Route path="/routesetter/challenges" element={<Suspense fallback={<PageFallback />}><RouteSetterChallengesView /></Suspense>} />
           <Route path="/routesetter/profile" element={<Suspense fallback={<PageFallback />}><RouteSetterProfileView /></Suspense>} />

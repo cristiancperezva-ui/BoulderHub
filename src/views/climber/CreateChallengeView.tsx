@@ -143,7 +143,7 @@ export function ClimberCreateChallengeView() {
                       padding: '0.375rem 0.5rem', background: 'var(--color-bg-surface)',
                       borderRadius: '0.375rem', fontSize: '0.8rem',
                     }}>
-                      <span style={{ color: 'var(--color-text-primary)' }}>{b.wallName} · V{b.proposedDifficultyV}</span>
+                      <span style={{ color: 'var(--color-text-primary)' }}>{b.wallName} · {b.proposedDifficultyUnknown ? 'V?' : `V${b.proposedDifficultyV}`}</span>
                       <button onClick={() => toggleBlock(id)}
                         style={{ background: 'none', border: 'none', color: 'var(--color-state-error)', cursor: 'pointer', fontSize: '0.75rem' }}>
                         Quitar
@@ -215,9 +215,11 @@ export function ClimberCreateChallengeView() {
                       <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: '0.85rem' }}>{block.wallName}</span>
                       <span style={{
                         fontSize: '0.7rem', padding: '0.125rem 0.375rem', borderRadius: '999px',
-                        background: 'rgba(232,125,62,0.15)', color: 'var(--color-accent-primary)', fontWeight: 600,
+                        background: block.proposedDifficultyUnknown ? 'rgba(108,108,108,0.15)' : 'rgba(232,125,62,0.15)',
+                        color: block.proposedDifficultyUnknown ? 'var(--color-text-muted)' : 'var(--color-accent-primary)',
+                        fontWeight: 600,
                       }}>
-                        V{block.proposedDifficultyV}
+                        {block.proposedDifficultyUnknown ? 'V?' : `V${block.proposedDifficultyV}`}
                       </span>
                     </div>
                     <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>

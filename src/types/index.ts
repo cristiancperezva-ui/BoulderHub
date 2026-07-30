@@ -52,7 +52,8 @@ export interface Block {
   categoryColorId: string;
   categoryColorName: string;   // denormalizado
   holdColors: string[];        // array de hex colors
-  proposedDifficultyV: number; // 1-14
+  proposedDifficultyV: number; // 1-14 (0 si proposedDifficultyUnknown)
+  proposedDifficultyUnknown?: boolean; // true si el setter marcó "?" en dificultad
   comments: string;
   createdAt: number;
   active: boolean;
