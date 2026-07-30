@@ -137,7 +137,7 @@ export function ClimberBlockDetailView() {
 
               {/* 1. Color */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🎨 Color:</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🎨 Categoría:</span>
                 <span style={{
                   fontSize: '0.9rem', fontWeight: 600, padding: '0.25rem 0.75rem', borderRadius: '999px',
                   background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)',
@@ -145,6 +145,25 @@ export function ClimberBlockDetailView() {
                   {block.categoryColorName}
                 </span>
               </div>
+
+              {/* Colores de presas */}
+              {block.holdColors && block.holdColors.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>🟣 Presas:</span>
+                  <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                    {block.holdColors.map((color, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: color,
+                          border: '1px solid rgba(255,255,255,0.15)',
+                        }} />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{color}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 2. Grado propuesto por el routesetter */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>

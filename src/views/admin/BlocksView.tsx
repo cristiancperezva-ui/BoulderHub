@@ -125,6 +125,17 @@ export function AdminBlocksView() {
                       background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)', fontWeight: 500 }}>
                       {block.categoryColorName}
                     </span>
+                    {block.holdColors && block.holdColors.length > 0 && (
+                      <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center' }}>
+                        {block.holdColors.map((color, i) => (
+                          <div key={i} title={color} style={{
+                            width: 12, height: 12, borderRadius: '50%',
+                            background: color,
+                            border: '1px solid rgba(255,255,255,0.15)',
+                          }} />
+                        ))}
+                      </div>
+                    )}
                     {!block.active && <span style={{ fontSize: '0.65rem', padding: '0.125rem 0.5rem', borderRadius: '999px',
                       background: 'rgba(216,76,76,0.1)', color: 'var(--color-state-error)', fontWeight: 600 }}>Inactivo</span>}
                   </div>

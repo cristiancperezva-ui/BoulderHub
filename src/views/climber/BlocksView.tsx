@@ -303,6 +303,21 @@ function BlockCard({ block, userAttempt }: { block: FirestoreDoc<Block>; userAtt
               background: 'rgba(90,155,213,0.15)', color: 'var(--color-state-info)', fontWeight: 500 }}>
               {block.categoryColorName}
             </span>
+            {block.holdColors && block.holdColors.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center' }}>
+                {block.holdColors.map((color, i) => (
+                  <div key={i}
+                    title={color}
+                    style={{
+                      width: 14, height: 14, borderRadius: '50%',
+                      background: color,
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      flexShrink: 0,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
             {statusBadge && (
               <span style={{ fontSize: '0.65rem', padding: '0.125rem 0.375rem', borderRadius: '999px',
                 background: statusBadge.color + '22', color: statusBadge.color, fontWeight: 600 }}>
