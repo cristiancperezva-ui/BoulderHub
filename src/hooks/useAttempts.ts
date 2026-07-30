@@ -2,7 +2,7 @@
 // Cache agresiva + localStorage para reducir lecturas a Firestore
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { collectionGroup, query, where, getDocs, setDoc, doc, collection } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getSubDocs, setSubDoc } from '@/lib/firestore';
 import { useAuth } from '@/hooks/useAuth';
@@ -81,25 +81,31 @@ export function useMyAttempts() {
       const cached = getCachedAttempts(user.uid);
       if (cached) return cached;
 
-      // 2. Leer de Firestore via collectionGroup (1 sola lectura)
+      // 2. Leer de Firestore desde users/{userId}/attempts (no necesita índice)
       const map = new Map<string, Attempt>();
       try {
-        const q = query(
-          collectionGroup(db, 'attempts'),
-          where('userId', '==', user.uid),
-        );
-        const snap = await getDocs(q);
-        snap.docs.forEach(doc => {
-          const segments = doc.ref.path.split('/');
-          const blockId = segments[segments.length - 3];
-          map.set(blockId, doc.data() as Attempt);
+        const snap = await getDocs(collection(db, 'users', user.uid, 'attempts'));
+        snap.forEach(d => {
+          map.set(d.id, d.data() as Attempt);
         });
       } catch (e) {
-        console.warn('collectionGroup falló, asegúrate de crear el índice compuesto en Firestore:', e);
+        console.warn('Error al leer intentos del usuario:', e);
+        // Fallback: intentar via collectionGroup por si el índice ya existe
+        try {
+          const q = query(
+            collectionGroup(db, 'attempts'),
+            where('userId', '==', user.uid),
+          );
+          const snap = await getDocs(q);
+          snap.docs.forEach(doc => {
+            const segments = doc.ref.path.split('/');
+            const blockId = segments[segments.length - 3];
+            map.set(blockId, doc.data() as Attempt);
+          });
+        } catch { /* ignorar */ }
       }
 
       // 3. Guardar en localStorage
-      // Guardar en localStorage (serializando como objeto plano)
       setCachedAttempts(user.uid, map);
       return map;
     },
@@ -125,7 +131,14 @@ export function useSaveAttempt() {
       attempt: Partial<Attempt>;
     }) => {
       if (!user) throw new Error('No autenticado');
+      // Escribir en ambos lugares para redundancia:
+      // 1. Subcolección del bloque (para BlockDetailView)
       await setSubDoc<Attempt>('blocks', blockId, 'attempts', user.uid, attempt);
+      // 2. Subcolección del usuario (para métricas y filtros, sin collectionGroup)
+      await setDoc(doc(db, 'users', user.uid, 'attempts', blockId), {
+        ...attempt,
+        updatedAt: Date.now(),
+      });
     },
     onSuccess: (_data, variables) => {
       // Invalidar queries de intentos

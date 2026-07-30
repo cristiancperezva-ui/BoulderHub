@@ -35,6 +35,12 @@ service cloud.firestore {
       // Solo admin puede cambiar roles de otros
       allow write: if request.auth != null && 
         (request.auth.uid == userId || isAdmin());
+
+      // Subcolección: attempts del usuario (para métricas y filtros)
+      match /attempts/{blockId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // Walls
