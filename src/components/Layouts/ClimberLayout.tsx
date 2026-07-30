@@ -58,9 +58,13 @@ export function ClimberLayout() {
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <RoleSwitcher />
-          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-            {profile?.emoji ?? ''} {profile?.displayName ?? ''}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            <img src="/icons/icon-192x192.png" alt="BoulderHub"
+              style={{ width: 20, height: 20, borderRadius: '0.25rem' }} />
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              {profile?.displayName ?? ''}
+            </span>
+          </div>
         </div>
       </header>
 
