@@ -6,6 +6,7 @@ import { PublicLayout } from '@/components/Layouts/PublicLayout';
 import { ClimberLayout } from '@/components/Layouts/ClimberLayout';
 import { RouteSetterLayout } from '@/components/Layouts/RouteSetterLayout';
 import { AdminLayout } from '@/components/Layouts/AdminLayout';
+import { InstallBanner } from '@/components/InstallBanner';
 
 // Views cargadas eager (siempre necesarias para el flujo principal)
 import { LoginView } from '@/views/auth/LoginView';
@@ -76,61 +77,64 @@ export default function App() {
   };
 
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to={getDefaultRedirect()} replace />} />
+    <>
+      <Routes>
+        <Route path="/" element={<Navigate to={getDefaultRedirect()} replace />} />
 
-      <Route element={<PublicLayout />}>
-        <Route path="/auth" element={<LoginView />} />
-        <Route path="/legal" element={<LegalView />} />
-      </Route>
+        <Route element={<PublicLayout />}>
+          <Route path="/auth" element={<LoginView />} />
+          <Route path="/legal" element={<LegalView />} />
+        </Route>
 
-      <Route
-        element={
-          <ProtectedRoute requiredRole="admin">
-            <AdminLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/admin/dashboard" element={<Suspense fallback={<PageFallback />}><AdminDashboardView /></Suspense>} />
-        <Route path="/admin/walls" element={<Suspense fallback={<PageFallback />}><AdminWallsView /></Suspense>} />
-        <Route path="/admin/categories" element={<Suspense fallback={<PageFallback />}><AdminCategoriesView /></Suspense>} />
-        <Route path="/admin/users" element={<Suspense fallback={<PageFallback />}><AdminUsersView /></Suspense>} />
-        <Route path="/admin/blocks" element={<Suspense fallback={<PageFallback />}><AdminBlocksView /></Suspense>} />
-        <Route path="/admin/metrics" element={<Suspense fallback={<PageFallback />}><AdminMetricsView /></Suspense>} />
-      </Route>
+        <Route
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/admin/dashboard" element={<Suspense fallback={<PageFallback />}><AdminDashboardView /></Suspense>} />
+          <Route path="/admin/walls" element={<Suspense fallback={<PageFallback />}><AdminWallsView /></Suspense>} />
+          <Route path="/admin/categories" element={<Suspense fallback={<PageFallback />}><AdminCategoriesView /></Suspense>} />
+          <Route path="/admin/users" element={<Suspense fallback={<PageFallback />}><AdminUsersView /></Suspense>} />
+          <Route path="/admin/blocks" element={<Suspense fallback={<PageFallback />}><AdminBlocksView /></Suspense>} />
+          <Route path="/admin/metrics" element={<Suspense fallback={<PageFallback />}><AdminMetricsView /></Suspense>} />
+        </Route>
 
-      <Route
-        element={
-          <ProtectedRoute allowedRoles={['routesetter', 'admin']}>
-            <RouteSetterLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/routesetter/dashboard" element={<Suspense fallback={<PageFallback />}><RouteSetterDashboardView /></Suspense>} />
-        <Route path="/routesetter/blocks/create" element={<Suspense fallback={<PageFallback />}><RouteSetterCreateBlockView /></Suspense>} />
-        <Route path="/routesetter/blocks" element={<Suspense fallback={<PageFallback />}><RouteSetterMyBlocksView /></Suspense>} />
-        <Route path="/routesetter/challenges" element={<Suspense fallback={<PageFallback />}><RouteSetterChallengesView /></Suspense>} />
-        <Route path="/routesetter/profile" element={<Suspense fallback={<PageFallback />}><RouteSetterProfileView /></Suspense>} />
-      </Route>
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={['routesetter', 'admin']}>
+              <RouteSetterLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/routesetter/dashboard" element={<Suspense fallback={<PageFallback />}><RouteSetterDashboardView /></Suspense>} />
+          <Route path="/routesetter/blocks/create" element={<Suspense fallback={<PageFallback />}><RouteSetterCreateBlockView /></Suspense>} />
+          <Route path="/routesetter/blocks" element={<Suspense fallback={<PageFallback />}><RouteSetterMyBlocksView /></Suspense>} />
+          <Route path="/routesetter/challenges" element={<Suspense fallback={<PageFallback />}><RouteSetterChallengesView /></Suspense>} />
+          <Route path="/routesetter/profile" element={<Suspense fallback={<PageFallback />}><RouteSetterProfileView /></Suspense>} />
+        </Route>
 
-      <Route
-        element={
-          <ProtectedRoute allowedRoles={['climber', 'routesetter', 'admin']}>
-            <ClimberLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/climber/dashboard" element={<ClimberDashboardView />} />
-        <Route path="/climber/blocks" element={<ClimberBlocksView />} />
-        <Route path="/climber/blocks/:blockId" element={<Suspense fallback={<PageFallback />}><ClimberBlockDetailView /></Suspense>} />
-        <Route path="/climber/metrics" element={<Suspense fallback={<PageFallback />}><ClimberMetricsView /></Suspense>} />
-        <Route path="/climber/challenges" element={<Suspense fallback={<PageFallback />}><ClimberChallengesView /></Suspense>} />
-        <Route path="/climber/challenges/create" element={<Suspense fallback={<PageFallback />}><ClimberCreateChallengeView /></Suspense>} />
-        <Route path="/climber/challenges/:challengeId" element={<Suspense fallback={<PageFallback />}><ClimberChallengeDetailView /></Suspense>} />
-        <Route path="/climber/profile" element={<Suspense fallback={<PageFallback />}><ClimberProfileView /></Suspense>} />
-      </Route>
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={['climber', 'routesetter', 'admin']}>
+              <ClimberLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/climber/dashboard" element={<ClimberDashboardView />} />
+          <Route path="/climber/blocks" element={<ClimberBlocksView />} />
+          <Route path="/climber/blocks/:blockId" element={<Suspense fallback={<PageFallback />}><ClimberBlockDetailView /></Suspense>} />
+          <Route path="/climber/metrics" element={<Suspense fallback={<PageFallback />}><ClimberMetricsView /></Suspense>} />
+          <Route path="/climber/challenges" element={<Suspense fallback={<PageFallback />}><ClimberChallengesView /></Suspense>} />
+          <Route path="/climber/challenges/create" element={<Suspense fallback={<PageFallback />}><ClimberCreateChallengeView /></Suspense>} />
+          <Route path="/climber/challenges/:challengeId" element={<Suspense fallback={<PageFallback />}><ClimberChallengeDetailView /></Suspense>} />
+          <Route path="/climber/profile" element={<Suspense fallback={<PageFallback />}><ClimberProfileView /></Suspense>} />
+        </Route>
 
-      <Route path="*" element={<Navigate to={getDefaultRedirect()} replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to={getDefaultRedirect()} replace />} />
+      </Routes>
+      <InstallBanner />
+    </>
   );
 }
