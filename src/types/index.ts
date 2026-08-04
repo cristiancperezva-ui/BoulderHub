@@ -58,12 +58,15 @@ export interface Block {
   createdAt: number;
   active: boolean;
   deactivatedAt: number | null; // timestamp de cuando se desactivó (para históricos)
-  // Métricas computadas (se actualizan con cada intento)
+  // Métricas computadas (se actualizan con cada intento vía increment() atómico,
+  // sin necesidad de releer toda la subcolección de attempts)
   avgRating: number;
   totalAttempts: number;
   flashCount: number;
   encadenadoCount: number;
   proyectoCount: number;
+  ratingSum?: number;    // suma acumulada de estrellas (para recalcular avgRating sin re-lecturas)
+  ratingCount?: number;  // cantidad de intentos con rating asignado
 }
 
 /** Intento de un escalador en un bloque (subcolección) */

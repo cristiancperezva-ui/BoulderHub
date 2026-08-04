@@ -27,7 +27,9 @@ service cloud.firestore {
 
     // Users
     match /users/{userId} {
-      allow read: if true;
+      // Requiere sesión iniciada para leer perfiles (evita scraping anónimo
+      // masivo de emails/nombres vía API REST de Firestore)
+      allow read: if request.auth != null;
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update: if request.auth != null && request.auth.uid == userId;
       allow delete: if false;
@@ -65,9 +67,24 @@ service cloud.firestore {
         // Routesetter o admin puede hacer cambios completos a cualquier bloque
         (isRouteSetter() || isAdmin())
         ||
-        // Cualquier usuario autenticado puede actualizar solo métricas (intentos, rating, etc.)
-        (request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['avgRating', 'totalAttempts', 'flashCount', 'encadenadoCount', 'proyectoCount', 'updatedAt']))
+        // Cualquier usuario autenticado puede actualizar solo métricas agregadas
+        // (intentos, rating, etc.), con validación de tipo/rango para evitar
+        // que un cliente malicioso inyecte valores arbitrarios (ej. totalAttempts=999999)
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['avgRating', 'totalAttempts', 'flashCount', 'encadenadoCount', 'proyectoCount', 'ratingSum', 'ratingCount', 'updatedAt'])
+          && (!('avgRating' in request.resource.data) ||
+              (request.resource.data.avgRating is number &&
+               request.resource.data.avgRating >= 0 && request.resource.data.avgRating <= 5))
+          && (!('totalAttempts' in request.resource.data) ||
+              (request.resource.data.totalAttempts is number &&
+               request.resource.data.totalAttempts >= (resource.data.totalAttempts is number ? resource.data.totalAttempts : 0) &&
+               request.resource.data.totalAttempts <= (resource.data.totalAttempts is number ? resource.data.totalAttempts : 0) + 1))
+          && (!('flashCount' in request.resource.data) || request.resource.data.flashCount is number)
+          && (!('encadenadoCount' in request.resource.data) || request.resource.data.encadenadoCount is number)
+          && (!('proyectoCount' in request.resource.data) || request.resource.data.proyectoCount is number)
+          && (!('ratingCount' in request.resource.data) || request.resource.data.ratingCount is number)
+        )
       );
       allow delete: if isAdmin();
 

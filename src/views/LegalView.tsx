@@ -45,13 +45,45 @@ export function LegalView() {
           sea almacenada en nuestra base de datos. La información pública como nombre de usuario,
           emoji, estadísticas de escalada, y calificaciones será visible para otros usuarios
           de la comunidad con el fin de fomentar la interacción y el progreso colectivo.
-          No compartimos tus datos con terceros ni utilizamos tu información con fines comerciales.
+        </p>
+        <p style={{ color: 'var(--color-text-secondary)' }}>
+          Tratamos tus datos personales conforme a la normativa de protección de datos aplicable
+          (incluyendo, cuando corresponda, la Ley 1581 de 2012 de Colombia y normas equivalentes
+          en tu jurisdicción). Puedes ejercer tus derechos de acceso, corrección, actualización
+          y eliminación de tus datos personales ("habeas data") en cualquier momento contactando
+          al administrador de la comunidad (ver sección 5).
         </p>
       </section>
 
       <section style={{ marginBottom: '2rem' }}>
         <h2 style={{ color: 'var(--color-text-primary)', marginBottom: '0.75rem', fontSize: '1.125rem' }}>
-          4. Seguridad
+          4. Uso Comercial de Datos Agregados y Alianzas con Gimnasios
+        </h2>
+        <p style={{ color: 'var(--color-text-secondary)' }}>
+          BoulderHub podrá compartir, licenciar o comercializar <strong>estadísticas agregadas
+          y/o anonimizadas</strong> de uso de la plataforma (por ejemplo: número de intentos por
+          bloque o muro, distribución de grados V, frecuencia de visitas, popularidad de colores
+          o categorías, tendencias de progreso de la comunidad) con gimnasios de escalada afiliados
+          y otros terceros, con el fin de mejorar el diseño de rutas, la operación de los gimnasios
+          y la experiencia general de la comunidad escaladora.
+        </p>
+        <p style={{ color: 'var(--color-text-secondary)' }}>
+          Estos reportes agregados <strong>no identifican individualmente</strong> a los usuarios
+          salvo que exista un consentimiento explícito adicional (por ejemplo, tablas de
+          clasificación o rankings públicos dentro de la propia app, que ya son visibles para la
+          comunidad conforme a la sección 3). BoulderHub no vende tu nombre, email, ni datos de
+          contacto a terceros.
+        </p>
+        <p style={{ color: 'var(--color-text-secondary)' }}>
+          Si prefieres que tu actividad quede excluida de los reportes agregados que se comparten
+          con gimnasios, puedes solicitarlo escribiendo al administrador de la comunidad
+          (sección 5); tu solicitud será aplicada en los siguientes reportes generados.
+        </p>
+      </section>
+
+      <section style={{ marginBottom: '2rem' }}>
+        <h2 style={{ color: 'var(--color-text-primary)', marginBottom: '0.75rem', fontSize: '1.125rem' }}>
+          5. Seguridad
         </h2>
         <p style={{ color: 'var(--color-text-secondary)' }}>
           La escalada es un deporte inherentemente peligroso. Las rutas, clasificaciones,
@@ -65,11 +97,12 @@ export function LegalView() {
 
       <section style={{ marginBottom: '2rem' }}>
         <h2 style={{ color: 'var(--color-text-primary)', marginBottom: '0.75rem', fontSize: '1.125rem' }}>
-          5. Contacto
+          6. Contacto
         </h2>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Si tienes preguntas sobre este aviso legal, o deseas solicitar la eliminación
-          de tus datos de la plataforma, por favor contacta al administrador de la comunidad.
+          Si tienes preguntas sobre este aviso legal, deseas solicitar la eliminación
+          de tus datos de la plataforma, o exclusión de los reportes agregados descritos
+          en la sección 4, por favor contacta al administrador de la comunidad.
         </p>
       </section>
 
@@ -79,7 +112,9 @@ export function LegalView() {
         borderTop: '1px solid var(--color-border-subtle)',
         paddingTop: '1.5rem',
       }}>
-        Última actualización: Julio 2026
+        Última actualización: Agosto 2026. Este documento es una referencia informativa
+        y no sustituye asesoría legal profesional; se recomienda revisión por un abogado
+        antes de su uso comercial formal con gimnasios u otros socios.
       </p>
     </div>
   );

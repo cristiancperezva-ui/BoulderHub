@@ -7,6 +7,19 @@ import type { Attempt } from '@/types';
 import {
   BarChart3, Download, TrendingUp, Award, Flame, Calendar, Star, Activity
 } from 'lucide-react';
+import {
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
+
+const CHART_COLORS = {
+  flash: '#4A9E6E',
+  encadenado: '#D4A84B',
+  proyecto: '#5B9BD5',
+  primary: '#E87D3E',
+};
+
+const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 
 interface AttemptRecord {
   date: string;
@@ -107,7 +120,48 @@ export function ClimberMetricsView() {
     const avgRating = total > 0 ? filtered.reduce((s, a) => s + (a.rating ?? 0), 0) / total : 0;
     const streak = calculateStreak(filtered.map(a => a.date));
     const activeDays = new Set(filtered.map(a => a.date)).size;
-    return { total, flashes, encadenados, proyectos, avgRating, streak, activeDays };
+    const sends = filtered.filter(a => a.type === 'flash' || a.type === 'encadenado');
+    const hardestGrade = sends.length > 0 ? Math.max(...sends.map(a => a.proposedV ?? 0)) : 0;
+    const flashRate = sends.length > 0 ? Math.round((flashes / sends.length) * 100) : 0;
+    return { total, flashes, encadenados, proyectos, avgRating, streak, activeDays, hardestGrade, flashRate };
+  }, [filtered]);
+
+  // Datos para graficos (derivados en memoria, 0 lecturas extra a Firestore)
+
+  const gradeDistribution = useMemo(() => {
+    const counts = new Map<number, number>();
+    filtered.forEach(a => {
+      if (a.proposedV && a.proposedV > 0) counts.set(a.proposedV, (counts.get(a.proposedV) ?? 0) + 1);
+    });
+    return [...counts.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([grade, count]) => ({ grade: `V${grade}`, count }));
+  }, [filtered]);
+
+  const typeBreakdown = useMemo(() => ([
+    { name: 'Flash', value: kpis.flashes, color: CHART_COLORS.flash },
+    { name: 'Encadenado', value: kpis.encadenados, color: CHART_COLORS.encadenado },
+    { name: 'Proyecto', value: kpis.proyectos, color: CHART_COLORS.proyecto },
+  ].filter(d => d.value > 0)), [kpis]);
+
+  const monthlyProgress = useMemo(() => {
+    const byMonth = new Map<string, number>();
+    filtered.forEach(a => {
+      const month = a.date.slice(0, 7);
+      byMonth.set(month, (byMonth.get(month) ?? 0) + 1);
+    });
+    const sorted = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b));
+    let cumulative = 0;
+    return sorted.map(([month, count]) => {
+      cumulative += count;
+      return { month: format(parseISO(`${month}-01`), 'MMM yy'), intentos: count, acumulado: cumulative };
+    });
+  }, [filtered]);
+
+  const dayOfWeekActivity = useMemo(() => {
+    const counts = new Array(7).fill(0);
+    filtered.forEach(a => { counts[parseISO(a.date).getDay()]++; });
+    return DAY_LABELS.map((day, i) => ({ day, count: counts[i] }));
   }, [filtered]);
 
   const handleExport = () => {
@@ -172,6 +226,8 @@ export function ClimberMetricsView() {
           { icon: Star, label: 'Prom. estrellas', value: kpis.total > 0 ? kpis.avgRating.toFixed(1) : '—', color: 'var(--color-accent-tertiary)' },
           { icon: Flame, label: 'Racha 🔥', value: `${kpis.streak} días`, color: 'var(--color-state-error)' },
           { icon: Calendar, label: 'Días activo', value: kpis.activeDays, color: 'var(--color-state-info)' },
+          { icon: BarChart3, label: 'Grado más alto', value: kpis.hardestGrade > 0 ? `V${kpis.hardestGrade}` : '—', color: 'var(--color-accent-primary)' },
+          { icon: Award, label: '% Flash', value: `${kpis.flashRate}%`, color: 'var(--color-accent-secondary)' },
         ].map(({ icon: Icon, label, value, color }) => (
           <div key={label} style={{
             background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
@@ -183,6 +239,76 @@ export function ClimberMetricsView() {
           </div>
         ))}
       </div>
+
+      {/* Gráficos */}
+      {records.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          {monthlyProgress.length > 1 && (
+            <div style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+              <h3 style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+                📈 Progreso acumulado
+              </h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={monthlyProgress}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="var(--color-text-muted)" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--color-text-muted)" />
+                  <Tooltip contentStyle={{ background: '#1e1e1e', border: 'none', borderRadius: 8, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="acumulado" name="Total acumulado" stroke={CHART_COLORS.primary} fill={CHART_COLORS.primary} fillOpacity={0.25} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {gradeDistribution.length > 0 && (
+            <div style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+              <h3 style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+                🧱 Pirámide de grados
+              </h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={gradeDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                  <XAxis dataKey="grade" tick={{ fontSize: 11 }} stroke="var(--color-text-muted)" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--color-text-muted)" />
+                  <Tooltip contentStyle={{ background: '#1e1e1e', border: 'none', borderRadius: 8, fontSize: 12 }} />
+                  <Bar dataKey="count" name="Intentos" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {typeBreakdown.length > 0 && (
+            <div style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+              <h3 style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+                🥧 Tipos de intento
+              </h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={typeBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={(d) => `${d.name} (${d.value})`}>
+                    {typeBreakdown.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: '#1e1e1e', border: 'none', borderRadius: 8, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          <div style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+            <h3 style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+              📅 Actividad por día de la semana
+            </h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={dayOfWeekActivity}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="var(--color-text-muted)" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="var(--color-text-muted)" />
+                <Tooltip contentStyle={{ background: '#1e1e1e', border: 'none', borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="count" name="Intentos" fill={CHART_COLORS.encadenado} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {records.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>

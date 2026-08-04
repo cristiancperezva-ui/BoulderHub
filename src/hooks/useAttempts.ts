@@ -2,11 +2,12 @@
 // Cache agresiva + localStorage para reducir lecturas a Firestore
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collectionGroup, query, where, getDocs, setDoc, doc, collection, writeBatch } from 'firebase/firestore';
+import { collectionGroup, query, where, getDocs, setDoc, updateDoc, doc, collection, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getSubDocs, setSubDoc } from '@/lib/firestore';
+import { computeBlockMetricsUpdate } from '@/lib/blockMetrics';
 import { useAuth } from '@/hooks/useAuth';
-import type { Attempt } from '@/types';
+import type { Attempt, Block } from '@/types';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
@@ -138,9 +139,15 @@ export function useSaveAttempt() {
     mutationFn: async ({
       blockId,
       attempt,
+      previousAttempt,
+      block,
     }: {
       blockId: string;
       attempt: Partial<Attempt>;
+      /** Intento anterior del usuario en este bloque (null/undefined si es nuevo) */
+      previousAttempt?: Pick<Attempt, 'type' | 'rating'> | null;
+      /** Snapshot cacheado del bloque (para derivar avgRating sin releer la subcolección) */
+      block?: Pick<Block, 'ratingSum' | 'ratingCount'>;
     }) => {
       if (!user) throw new Error('No autenticado');
       // Escribir en ambos lugares para redundancia:
@@ -151,6 +158,15 @@ export function useSaveAttempt() {
         ...attempt,
         updatedAt: Date.now(),
       });
+
+      // 3. Actualizar métricas agregadas del bloque con increment() atómico.
+      //    0 lecturas extra (antes: 1 lectura por CADA intento existente en el bloque).
+      const metricsUpdate = computeBlockMetricsUpdate(
+        { ratingSum: block?.ratingSum ?? 0, ratingCount: block?.ratingCount ?? 0 },
+        previousAttempt ?? null,
+        attempt,
+      );
+      await updateDoc(doc(db, 'blocks', blockId), metricsUpdate);
     },
     onSuccess: (_data, variables) => {
       // Invalidar queries de intentos

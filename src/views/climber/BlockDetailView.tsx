@@ -1,19 +1,16 @@
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Star, Mountain, Edit3 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useBlock } from '@/hooks/useBlocks';
 import { useBlockAttempts, useSaveAttempt } from '@/hooks/useAttempts';
-import { updateDocById } from '@/lib/firestore';
 import { ImageThumb } from '@/components/ImageZoom';
 import { formatBlockDate } from '@/lib/scoring';
-import type { Block, Attempt, FirestoreDoc } from '@/types';
+import type { Attempt, FirestoreDoc } from '@/types';
 
 export function ClimberBlockDetailView() {
   const { blockId } = useParams();
   const { user, profile } = useAuth();
-  const queryClient = useQueryClient();
   const [showSavedPopup, setShowSavedPopup] = useState(false);
 
   // ✅ Datos cacheados con TanStack Query
@@ -45,25 +42,6 @@ export function ClimberBlockDetailView() {
   }, [myAttempt]);
 
   // Mutation para recalcular métricas del bloque (se ejecuta tras guardar intento)
-  const updateMetrics = useMutation({
-    mutationFn: async (attempts: FirestoreDoc<Attempt>[]) => {
-      if (!blockId) return;
-      const ratings = attempts.filter(a => a.rating).map(a => a.rating!);
-      const avg = ratings.length > 0 ? ratings.reduce((s, r) => s + r, 0) / ratings.length : 0;
-      await updateDocById<Block>('blocks', blockId, {
-        avgRating: Math.round(avg * 10) / 10,
-        totalAttempts: attempts.length,
-        flashCount: attempts.filter(a => a.type === 'flash').length,
-        encadenadoCount: attempts.filter(a => a.type === 'encadenado').length,
-        proyectoCount: attempts.filter(a => a.type === 'proyecto').length,
-      } as Partial<Block>);
-    },
-    onSuccess: () => {
-      // Invalidar caché del bloque para que recargue métricas
-      queryClient.invalidateQueries({ queryKey: ['blocks', 'detail', blockId] });
-      queryClient.invalidateQueries({ queryKey: ['blocks', 'active'] });
-    },
-  });
 
   const handleSubmit = async () => {
     if (!user || !blockId || !attemptType) return;
@@ -81,15 +59,11 @@ export function ClimberBlockDetailView() {
           rating: rating || null,
           createdAt: Date.now(),
         },
+        // Intento previo (para calcular el delta de métricas sin releer la subcolección)
+        previousAttempt: myAttempt ? { type: myAttempt.type, rating: myAttempt.rating } : null,
+        // Snapshot cacheado del bloque (para derivar avgRating sin lecturas extra)
+        block: { ratingSum: block?.ratingSum, ratingCount: block?.ratingCount },
       });
-      // Recalcular métricas del bloque (fallo no crítico — el intento ya se guardó)
-      try {
-        const { getSubDocs } = await import('@/lib/firestore');
-        const freshAttempts = await getSubDocs<Attempt>('blocks', blockId, 'attempts', 'createdAt');
-        await updateMetrics.mutateAsync(freshAttempts);
-      } catch (metricsErr) {
-        console.warn('Métricas no actualizadas (el intento sí se guardó):', metricsErr);
-      }
       setShowSavedPopup(true);
       setTimeout(() => setShowSavedPopup(false), 2500);
     } catch (err) {
@@ -310,16 +284,16 @@ export function ClimberBlockDetailView() {
               </div>
             )}
 
-            <button onClick={handleSubmit} disabled={!attemptType || saveAttempt.isPending || updateMetrics.isPending}
+            <button onClick={handleSubmit} disabled={!attemptType || saveAttempt.isPending}
               style={{
                 width: '100%', padding: '0.75rem',
-                background: (!attemptType || saveAttempt.isPending || updateMetrics.isPending) ? 'var(--color-bg-hover)' : 'var(--color-accent-secondary)',
-                color: (!attemptType || saveAttempt.isPending || updateMetrics.isPending) ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
+                background: (!attemptType || saveAttempt.isPending) ? 'var(--color-bg-hover)' : 'var(--color-accent-secondary)',
+                color: (!attemptType || saveAttempt.isPending) ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
                 border: 'none', borderRadius: '0.5rem', fontWeight: 600,
-                cursor: (!attemptType || saveAttempt.isPending || updateMetrics.isPending) ? 'not-allowed' : 'pointer', fontSize: '0.95rem',
+                cursor: (!attemptType || saveAttempt.isPending) ? 'not-allowed' : 'pointer', fontSize: '0.95rem',
               }}
             >
-              {saveAttempt.isPending || updateMetrics.isPending ? 'Guardando...' : isEditing ? '✏️ Actualizar' : '💾 Guardar'}
+              {saveAttempt.isPending ? 'Guardando...' : isEditing ? '✏️ Actualizar' : '💾 Guardar'}
             </button>
           </div>
 

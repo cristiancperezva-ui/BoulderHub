@@ -1,18 +1,13 @@
-import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllDocs } from '@/lib/firestore';
-import type { Block, FirestoreDoc } from '@/types';
+import { useActiveBlocks } from '@/hooks/useBlocks';
 import { Mountain, Medal, BarChart3, TrendingUp, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export function ClimberDashboardView() {
   const { profile } = useAuth();
-  const [blocks, setBlocks] = useState<FirestoreDoc<Block>[]>([]);
-  useEffect(() => {
-    getAllDocs<Block>('blocks', 'createdAt')
-      .then(d => setBlocks(d.filter(b => b.active !== false)))
-      .catch(() => {});
-  }, []);
+  // ✅ Usa la misma caché de TanStack Query que BlocksView (10 min staleTime)
+  //    en vez de una lectura directa a Firestore en cada visita al Dashboard
+  const { data: blocks = [] } = useActiveBlocks();
 
   // Count blocks that have at least some activity (totalAttempts > 0)
   const totalAttempts = blocks.reduce((s, b) => s + (b.totalAttempts ?? 0), 0);
