@@ -105,7 +105,7 @@ export function AdminBlocksView() {
               }}>
                 <div style={{ width: 44, height: 44, borderRadius: '0.375rem', background: 'var(--color-bg-base)', overflow: 'hidden', flexShrink: 0 }}>
                   {block.photoUrl ? (
-                    <img src={block.photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={block.thumbUrl || block.photoUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                       <Mountain size={18} style={{ opacity: 0.3 }} />

@@ -63,23 +63,31 @@ export async function resizeAndConvertToWebP(
   });
 }
 
+/** Resultado de subir una imagen: URL completa + URL de miniatura. */
+export interface UploadImageResult {
+  url: string;
+  thumbUrl: string;
+}
+
 /**
  * Sube una imagen a Firebase Storage: redimensiona → WebP → upload.
+ * Además genera una miniatura WebP (~480px) para las cards (ahorro de datos).
  *
  * @param file Archivo original
  * @param path Ruta en Storage (ej: 'blocks/{blockId}')
  * @param onProgress Callback opcional con progreso 0-1
- * @returns URL de descarga pública
+ * @returns URL de descarga pública + URL de miniatura
  */
 export async function uploadImageAsWebP(
   file: File | Blob,
   path: string,
   onProgress?: (pct: number, label: string) => void,
-): Promise<string> {
+): Promise<UploadImageResult> {
   onProgress?.(0.1, 'Redimensionando imagen...');
 
   // 1) Redimensionar y convertir a WebP (en el cliente, rápido)
   const webpBlob = await resizeAndConvertToWebP(file);
+  const thumbBlob = await resizeAndConvertToWebP(file, 480, 0.6);
   onProgress?.(0.4, 'Subiendo a la nube...');
 
   // 2) Subir a Firebase Storage
@@ -87,12 +95,19 @@ export async function uploadImageAsWebP(
   await uploadBytes(storageRef, webpBlob, {
     contentType: 'image/webp',
   });
+  const thumbRef = ref(storage, `${path}.thumb.webp`);
+  await uploadBytes(thumbRef, thumbBlob, {
+    contentType: 'image/webp',
+  });
   onProgress?.(0.8, 'Procesando...');
 
   // 3) Obtener URL pública
-  const url = await getDownloadURL(storageRef);
+  const [url, thumbUrl] = await Promise.all([
+    getDownloadURL(storageRef),
+    getDownloadURL(thumbRef),
+  ]);
   onProgress?.(1, '¡Listo!');
-  return url;
+  return { url, thumbUrl };
 }
 
 /** Sube un archivo sin conversión (ej: PDFs, etc.). */

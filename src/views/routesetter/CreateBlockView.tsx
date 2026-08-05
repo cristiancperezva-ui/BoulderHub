@@ -9,6 +9,8 @@ import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Camera, X, Save, CheckCircle, HelpCircle, AlertTriangle } from 'lucide-react';
 import { ColorPicker } from '@/components/ui/ColorPicker';
+import { HoldHighlightEditor } from '@/components/ui/HoldHighlightEditor';
+import type { HoldRegion } from '@/types';
 
 export function RouteSetterCreateBlockView() {
   const { blockId } = useParams<{ blockId: string }>();
@@ -33,6 +35,7 @@ export function RouteSetterCreateBlockView() {
   const [uploadLabel, setUploadLabel] = useState('');
   const [newHoldColor, setNewHoldColor] = useState('#E87D3E');
   const [errors, setErrors] = useState<string[]>([]);
+  const [holdRegions, setHoldRegions] = useState<HoldRegion[]>([]);
 
   // ✅ Datos cacheados con TanStack Query
   const { data: walls = [] } = useWalls();
@@ -58,12 +61,14 @@ export function RouteSetterCreateBlockView() {
       setComments(existingBlock.comments || '');
       setExistingPhotoUrl(existingBlock.photoUrl || '');
       setSelectedRouteSetterId(existingBlock.routeSetterId || '');
+      setHoldRegions(existingBlock.holdRegions || []);
     }
   }, [existingBlock, isEditing]);
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setHoldRegions([]); // nueva foto → hay que volver a resaltar
     setPhoto({ file, preview: URL.createObjectURL(file) });
   };
 
@@ -97,16 +102,19 @@ export function RouteSetterCreateBlockView() {
       const catObj = categories.find(c => c.id === category);
 
       let photoUrl = existingPhotoUrl;
+      let thumbUrl = existingBlock?.thumbUrl ?? '';
 
       // Subir nueva foto si se cambió
       if (photo) {
         const targetBlockId = isEditing ? blockId! : crypto.randomUUID();
         const photoPath = `blocks/${targetBlockId}`;
         setUploadLabel('Optimizando imagen...');
-        photoUrl = await uploadImageAsWebP(photo.file, photoPath, (pct, label) => {
+        const uploaded = await uploadImageAsWebP(photo.file, photoPath, (pct, label) => {
           setUploadProgress(pct);
           if (label) setUploadLabel(label);
         });
+        photoUrl = uploaded.url;
+        thumbUrl = uploaded.thumbUrl;
       }
 
       setUploadLabel(isEditing ? 'Actualizando...' : 'Guardando en la base de datos...');
@@ -134,6 +142,8 @@ export function RouteSetterCreateBlockView() {
           categoryColorId: category,
           categoryColorName: catObj?.name ?? category,
           holdColors,
+          holdRegions,
+          thumbUrl,
           proposedDifficultyV: difficulty,
           comments,
           // Resetear métricas al editar
@@ -172,6 +182,8 @@ export function RouteSetterCreateBlockView() {
           categoryColorId: category,
           categoryColorName: catObj?.name ?? category,
           holdColors,
+          holdRegions,
+          thumbUrl,
           proposedDifficultyV: difficulty,
           comments,
           active: true,
@@ -195,6 +207,7 @@ export function RouteSetterCreateBlockView() {
         setWall('');
         setCategory('');
         setHoldColors([]);
+        setHoldRegions([]);
         setDifficulty(0);
         setComments('');
         setExistingPhotoUrl('');
@@ -297,7 +310,7 @@ export function RouteSetterCreateBlockView() {
                 style={{ width: '100%', maxHeight: 300, borderRadius: '0.5rem', objectFit: 'cover' }}
               />
               <button
-                onClick={() => { setPhoto(null); setExistingPhotoUrl(''); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                onClick={() => { setPhoto(null); setExistingPhotoUrl(''); setHoldRegions([]); if (fileInputRef.current) fileInputRef.current.value = ''; }}
                 style={{
                   position: 'absolute', top: 8, right: 8,
                   background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
@@ -477,6 +490,16 @@ export function RouteSetterCreateBlockView() {
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Selecciona colores de la paleta y agrégalos.</p>
           )}
         </div>
+
+        {/* Resaltado de presas */}
+        {(photo || existingPhotoUrl) && (
+          <HoldHighlightEditor
+            src={photo?.preview || existingPhotoUrl}
+            holdColors={holdColors}
+            value={holdRegions}
+            onChange={setHoldRegions}
+          />
+        )}
 
         {/* Dificultad V */}
         <div>

@@ -219,7 +219,7 @@ function BlockRow({ block, onToggle }: { block: FirestoreDoc<Block>; onToggle: (
         overflow: 'hidden',
       }}>
         {block.photoUrl ? (
-          <img src={block.photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={block.thumbUrl || block.photoUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <Mountain size={20} style={{ opacity: 0.4 }} />
         )}

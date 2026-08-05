@@ -67,6 +67,18 @@ export interface Block {
   proyectoCount: number;
   ratingSum?: number;    // suma acumulada de estrellas (para recalcular avgRating sin re-lecturas)
   ratingCount?: number;  // cantidad de intentos con rating asignado
+  // Resaltado de presas y miniatura para cards
+  holdRegions?: HoldRegion[]; // presas resaltadas en la foto (colorIndex = posición en holdColors)
+  thumbUrl?: string;          // miniatura WebP (~480px) para las cards
+}
+
+/** Región de una presa en la foto del bloque (coordenadas normalizadas 0-1) */
+export interface HoldRegion {
+  x: number;         // centro X (0-1)
+  y: number;         // centro Y (0-1)
+  w: number;         // ancho (0-1)
+  h: number;         // alto (0-1)
+  colorIndex: number; // índice en Block.holdColors
 }
 
 /** Intento de un escalador en un bloque (subcolección) */

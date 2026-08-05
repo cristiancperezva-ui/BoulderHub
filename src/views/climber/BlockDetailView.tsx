@@ -12,6 +12,7 @@ export function ClimberBlockDetailView() {
   const { blockId } = useParams();
   const { user, profile } = useAuth();
   const [showSavedPopup, setShowSavedPopup] = useState(false);
+  const [showHolds, setShowHolds] = useState(true);
 
   // ✅ Datos cacheados con TanStack Query
   const { data: block, isLoading } = useBlock(blockId);
@@ -82,13 +83,40 @@ export function ClimberBlockDetailView() {
       </Link>
 
       <div style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-        {/* Foto con zoom */}
-        <div style={{ width: '100%', aspectRatio: '16/9', background: 'var(--color-bg-elevated)' }}>
+        {/* Foto con zoom + presas resaltadas */}
+        <div style={{ width: '100%', background: 'var(--color-bg-elevated)' }}>
           {block.photoUrl ? (
-            <ImageThumb src={block.photoUrl} alt="Bloque" style={{ width: '100%', height: '100%' }} />
+            <ImageThumb
+              src={block.photoUrl}
+              alt="Bloque"
+              objectFit="contain"
+              overlay={
+                showHolds && (block.holdRegions?.length ?? 0) > 0
+                  ? { regions: block.holdRegions ?? [], colors: block.holdColors ?? [] }
+                  : null
+              }
+              style={{ width: '100%' }}
+            />
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem' }}>
               <Mountain size={48} style={{ opacity: 0.4 }} />
+            </div>
+          )}
+          {(block.holdRegions?.length ?? 0) > 0 && (block.holdColors?.length ?? 0) > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.5rem 1rem', background: 'var(--color-bg-base)' }}>
+              <button
+                onClick={() => setShowHolds((v) => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.375rem',
+                  padding: '0.375rem 0.75rem', borderRadius: '999px',
+                  border: '1px solid var(--color-border-default)',
+                  background: showHolds ? 'rgba(134,59,255,0.15)' : 'var(--color-bg-base)',
+                  color: showHolds ? 'var(--color-accent-primary)' : 'var(--color-text-secondary)',
+                  fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                ✨ Presas {showHolds ? 'on' : 'off'}
+              </button>
             </div>
           )}
         </div>

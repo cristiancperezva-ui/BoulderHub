@@ -1,8 +1,16 @@
 // ─── ImageZoom ────────────────────────────────────────────────────────────────
 // Modal que muestra la imagen en tamaño completo al hacer clic.
+// Soporta un overlay de presas resaltadas (HoldOverlay) sobre el thumb y el zoom.
 
 import { X, ZoomIn } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
+import { HoldOverlay } from '@/components/HoldOverlay';
+import type { HoldRegion } from '@/types';
+
+interface HoldOverlayData {
+  regions: HoldRegion[];
+  colors: string[];
+}
 
 interface ImageZoomProps {
   src: string;
@@ -10,11 +18,23 @@ interface ImageZoomProps {
   /** Clase CSS para el thumbnail */
   className?: string;
   /** Estilos inline para el thumbnail */
-  style?: React.CSSProperties;
+  style?: CSSProperties;
+  /** Overlay de presas resaltadas (se dibuja sobre el thumb y el zoom). */
+  overlay?: HoldOverlayData | null;
+  /** Ajuste de la imagen en el thumbnail. 'contain' muestra la foto completa (necesario con overlay). */
+  objectFit?: 'cover' | 'contain';
 }
 
-export function ImageThumb({ src, alt, className, style }: ImageZoomProps) {
+export function ImageThumb({
+  src,
+  alt,
+  className,
+  style,
+  overlay = null,
+  objectFit = 'cover',
+}: ImageZoomProps) {
   const [open, setOpen] = useState(false);
+  const showOverlay = !!(overlay && overlay.regions.length > 0 && overlay.colors.length > 0);
 
   return (
     <>
@@ -34,13 +54,15 @@ export function ImageThumb({ src, alt, className, style }: ImageZoomProps) {
           loading="lazy"
           style={{
             width: '100%',
-            height: '100%',
-            objectFit: 'cover',
+            height: objectFit === 'cover' ? '100%' : 'auto',
+            objectFit,
+            display: 'block',
             transition: 'transform 0.3s',
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
         />
+        {showOverlay && <HoldOverlay regions={overlay!.regions} colors={overlay!.colors} />}
         <div style={{
           position: 'absolute', bottom: 8, right: 8,
           background: 'rgba(0,0,0,0.6)', borderRadius: '50%',
@@ -73,17 +95,23 @@ export function ImageThumb({ src, alt, className, style }: ImageZoomProps) {
           >
             <X size={24} />
           </button>
-          <img
-            src={src}
-            alt={alt ?? 'Imagen ampliada'}
-            style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              objectFit: 'contain',
-              borderRadius: '0.5rem',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <img
+              src={src}
+              alt={alt ?? 'Imagen ampliada'}
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '85vh',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+                borderRadius: '0.5rem',
+                display: 'block',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {showOverlay && <HoldOverlay regions={overlay!.regions} colors={overlay!.colors} />}
+          </div>
         </div>
       )}
     </>
