@@ -10,6 +10,7 @@ import { db } from '@/lib/firebase';
 import { Camera, X, Save, CheckCircle, HelpCircle, AlertTriangle } from 'lucide-react';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { HoldHighlightEditor } from '@/components/ui/HoldHighlightEditor';
+import { remapColorIndices } from '@/lib/holdDetection';
 import type { HoldRegion } from '@/types';
 
 export function RouteSetterCreateBlockView() {
@@ -79,7 +80,10 @@ export function RouteSetterCreateBlockView() {
   };
 
   const removeHoldColor = (color: string) => {
-    setHoldColors(prev => prev.filter(c => c !== color));
+    const next = holdColors.filter(c => c !== color);
+    setHoldColors(next);
+    // Quitar las regiones del color eliminado y re-mapear los índices restantes
+    setHoldRegions(prev => remapColorIndices(prev, holdColors, next));
   };
 
   const validate = (): boolean => {
@@ -141,6 +145,7 @@ export function RouteSetterCreateBlockView() {
           photoUrl,
           categoryColorId: category,
           categoryColorName: catObj?.name ?? category,
+          categoryColor: catObj?.color ?? '',
           holdColors,
           holdRegions,
           thumbUrl,
@@ -181,6 +186,7 @@ export function RouteSetterCreateBlockView() {
           photoUrl,
           categoryColorId: category,
           categoryColorName: catObj?.name ?? category,
+          categoryColor: catObj?.color ?? '',
           holdColors,
           holdRegions,
           thumbUrl,
@@ -498,6 +504,8 @@ export function RouteSetterCreateBlockView() {
             holdColors={holdColors}
             value={holdRegions}
             onChange={setHoldRegions}
+            ringColor={selectedCat?.color}
+            onHoldColorsChange={setHoldColors}
           />
         )}
 

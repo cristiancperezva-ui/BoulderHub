@@ -92,7 +92,7 @@ export function ClimberBlockDetailView() {
               objectFit="contain"
               overlay={
                 showHolds && (block.holdRegions?.length ?? 0) > 0
-                  ? { regions: block.holdRegions ?? [], colors: block.holdColors ?? [] }
+                  ? { regions: block.holdRegions ?? [], colors: block.holdColors ?? [], ringColor: block.categoryColor }
                   : null
               }
               style={{ width: '100%' }}

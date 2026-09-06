@@ -10,6 +10,8 @@ import type { HoldRegion } from '@/types';
 interface HoldOverlayData {
   regions: HoldRegion[];
   colors: string[];
+  /** Color del anillo/contorno iluminado (color de Categoría del bloque). */
+  ringColor?: string;
 }
 
 interface ImageZoomProps {
@@ -62,7 +64,7 @@ export function ImageThumb({
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
         />
-        {showOverlay && <HoldOverlay regions={overlay!.regions} colors={overlay!.colors} />}
+        {showOverlay && <HoldOverlay regions={overlay!.regions} colors={overlay!.colors} ringColor={overlay!.ringColor} />}
         <div style={{
           position: 'absolute', bottom: 8, right: 8,
           background: 'rgba(0,0,0,0.6)', borderRadius: '50%',
@@ -110,7 +112,7 @@ export function ImageThumb({
               }}
               onClick={(e) => e.stopPropagation()}
             />
-            {showOverlay && <HoldOverlay regions={overlay!.regions} colors={overlay!.colors} />}
+            {showOverlay && <HoldOverlay regions={overlay!.regions} colors={overlay!.colors} ringColor={overlay!.ringColor} />}
           </div>
         </div>
       )}

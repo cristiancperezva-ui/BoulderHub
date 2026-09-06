@@ -3,11 +3,28 @@
 // Todo corre en canvas en el navegador: cero costo de servidor.
 
 import type { HoldRegion } from '@/types';
+import { traceOuterBoundary, rdpClosed, pointInPolygon } from './holdGeometry';
 
 interface Hsv {
   h: number;
   s: number;
   v: number;
+}
+
+/** Rodea con la silueta poligonal (pts) a una región; si falla, undefined. */
+interface SilhouetteInput {
+  ccX: number[];
+  ccY: number[];
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  w: number;
+  h: number;
+}
+
+function samePt(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+  return Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
 }
 
 export interface DetectHoldOptions {
@@ -109,6 +126,20 @@ function prep(
   maxDimension: number,
 ): PrepResult | null {
   if (holdColors.length === 0) return null;
+  const p = readWorkingPixels(img, maxDimension);
+  if (!p) return null;
+  return {
+    ...p,
+    matchers: buildMatchers(holdColors),
+    tols: buildTolerances(sensitivity),
+  };
+}
+
+/** Lee la imagen a un canvas de trabajo (≤ maxDimension px) y devuelve RGBA. */
+function readWorkingPixels(
+  img: HTMLImageElement | HTMLCanvasElement,
+  maxDimension: number,
+): { w: number; h: number; data: Uint8ClampedArray } | null {
   const srcW = img instanceof HTMLImageElement ? img.naturalWidth || img.width : img.width;
   const srcH = img instanceof HTMLImageElement ? img.naturalHeight || img.height : img.height;
   if (!srcW || !srcH) return null;
@@ -121,13 +152,135 @@ function prep(
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return null;
   ctx.drawImage(img, 0, 0, w, h);
-  return {
-    w,
-    h,
-    data: ctx.getImageData(0, 0, w, h).data,
-    matchers: buildMatchers(holdColors),
-    tols: buildTolerances(sensitivity),
-  };
+  return { w, h, data: ctx.getImageData(0, 0, w, h).data };
+}
+
+/**
+ * Construye la silueta poligonal (normalizada 0-1) de un componente conexo a
+ * partir de sus píxeles. Devuelve undefined si no se puede trazar (el render
+ * usa la elipse x/y/w/h como fallback).
+ */
+function buildSilhouette(s: SilhouetteInput): { x: number; y: number }[] | undefined {
+  const { ccX, ccY, minX, minY, maxX, maxY, w, h } = s;
+  if (ccX.length < 4) return undefined;
+  const bw = maxX - minX + 1;
+  const bh = maxY - minY + 1;
+  if (bw * bh > 2_000_000) return undefined;
+  const mask = new Uint8Array(bw * bh);
+  for (let i = 0; i < ccX.length; i++) {
+    mask[(ccY[i] - minY) * bw + (ccX[i] - minX)] = 1;
+  }
+  const ring = traceOuterBoundary(mask, bw, bh);
+  if (ring.length < 4) return undefined;
+  // Simplificación RDP en espacio de píxel, con tope de puntos (controla el
+  // tamaño guardado en Firestore: el doc del bloque sigue siendo pequeño).
+  let eps = 1.6;
+  let pts = rdpClosed(ring, eps);
+  let guard = 0;
+  while (pts.length > 60 && guard++ < 24) {
+    eps *= 1.5;
+    pts = rdpClosed(ring, eps);
+  }
+  if (pts.length < 3) return undefined;
+  const out = pts.map(([px, py]) => ({ x: (minX + px + 0.5) / w, y: (minY + py + 0.5) / h }));
+  // Quitar el punto de cierre duplicado (el path se cierra con Z en el SVG)
+  if (out.length > 1 && samePt(out[0], out[out.length - 1])) out.pop();
+  return out;
+}
+
+/** HSV → hex. */
+function hsvToHex(h: number, s: number, v: number): string {
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const to2 = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+  return `#${to2(r)}${to2(g)}${to2(b)}`;
+}
+
+/**
+ * Muestra el color de la presa en el punto (nx,ny) (promedio de una vecindad
+ * pequeña) y devuelve un hex "canónico" estable:
+ * - acromático (blanco/gris/negro) → snap a #FFFFFF / #808080 / #000000
+ * - cromático → cuantizado a buckets de tono/saturación/valor
+ * Devuelve null si el punto no tiene píxeles visibles.
+ */
+export function sampleHoldColor(
+  img: HTMLImageElement | HTMLCanvasElement,
+  nx: number,
+  ny: number,
+  maxDimension = 1000,
+): string | null {
+  const p = readWorkingPixels(img, maxDimension);
+  if (!p) return null;
+  const { w, h, data } = p;
+  const cx = Math.min(w - 1, Math.max(0, Math.round(nx * (w - 1))));
+  const cy = Math.min(h - 1, Math.max(0, Math.round(ny * (h - 1))));
+  const rad = 3;
+  let rSum = 0;
+  let gSum = 0;
+  let bSum = 0;
+  let n = 0;
+  for (let dy = -rad; dy <= rad; dy++) {
+    for (let dx = -rad; dx <= rad; dx++) {
+      const px = cx + dx;
+      const py = cy + dy;
+      if (px < 0 || py < 0 || px >= w || py >= h) continue;
+      const o = (py * w + px) * 4;
+      if (data[o + 3] < 128) continue;
+      rSum += data[o];
+      gSum += data[o + 1];
+      bSum += data[o + 2];
+      n++;
+    }
+  }
+  if (n === 0) return null;
+  const px = rgbToHsv(rSum / n, gSum / n, bSum / n);
+  if (px.s < 0.15) {
+    if (px.v < 0.25) return '#000000';
+    if (px.v > 0.78) return '#FFFFFF';
+    return '#808080';
+  }
+  // Cuantizar para agrupar presas del mismo tono en un chip estable
+  const hq = Math.round(px.h / 15) * 15;
+  const sq = Math.round(px.s / 0.12) * 0.12;
+  const vq = Math.round(px.v / 0.1) * 0.1;
+  return hsvToHex(((hq % 360) + 360) % 360, Math.min(1, Math.max(0, sq)), Math.min(1, Math.max(0.12, vq)));
+}
+
+/**
+ * Re-mapea `colorIndex` de cada región cuando cambia la lista holdColors
+ * (p. ej. al quitar un color de la paleta): descarta las regiones del color
+ * eliminado y reasigna los índices posteriores.
+ */
+export function remapColorIndices(regions: HoldRegion[], oldColors: string[], newColors: string[]): HoldRegion[] {
+  const map = oldColors.map((c) => newColors.indexOf(c));
+  const out: HoldRegion[] = [];
+  for (const r of regions) {
+    const ni = map[r.colorIndex] ?? -1;
+    if (ni < 0) continue;
+    out.push({ ...r, colorIndex: ni });
+  }
+  return out;
+}
+
+/** ¿El punto normalizado (nx,ny) cae dentro de la región (silueta o elipse)? */
+export function regionContains(r: HoldRegion, nx: number, ny: number): boolean {
+  if (r.pts && r.pts.length >= 3) {
+    const poly = r.pts.map((p) => [p.x, p.y] as const);
+    return pointInPolygon(poly, nx, ny);
+  }
+  const dx = (nx - r.x) / Math.max(r.w / 2, 1e-6);
+  const dy = (ny - r.y) / Math.max(r.h / 2, 1e-6);
+  return dx * dx + dy * dy <= 1;
 }
 
 /** Detecta todas las presas de los colores dados en la imagen. */
@@ -181,12 +334,16 @@ export function detectHolds(
       let minY = h;
       let maxX = -1;
       let maxY = -1;
+      const ccX: number[] = [];
+      const ccY: number[] = [];
 
       while (head < tail) {
         const pxl = queue[head++];
         const px = pxl % w;
         const py = (pxl / w) | 0;
         count++;
+        ccX.push(px);
+        ccY.push(py);
         if (px < minX) minX = px;
         if (px > maxX) maxX = px;
         if (py < minY) minY = py;
@@ -206,12 +363,14 @@ export function detectHolds(
 
       const area = count / n;
       if (area >= minBlobAreaPct && area <= maxBlobAreaPct) {
+        const pts = buildSilhouette({ ccX, ccY, minX, minY, maxX, maxY, w, h });
         regions.push({
           x: ((minX + maxX) / 2 + 0.5) / w,
           y: ((minY + maxY) / 2 + 0.5) / h,
           w: (maxX - minX + 1) / w,
           h: (maxY - minY + 1) / h,
           colorIndex: ci,
+          pts,
         });
       }
     }
@@ -267,12 +426,16 @@ export function addHoldAt(
   let minY = h;
   let maxX = -1;
   let maxY = -1;
+  const ccX: number[] = [];
+  const ccY: number[] = [];
 
   while (head < tail) {
     const pxl = queue[head++];
     const ppx = pxl % w;
     const ppy = (pxl / w) | 0;
     count++;
+    ccX.push(ppx);
+    ccY.push(ppy);
     if (ppx < minX) minX = ppx;
     if (ppx > maxX) maxX = ppx;
     if (ppy < minY) minY = ppy;
@@ -295,12 +458,14 @@ export function addHoldAt(
 
   const area = count / (w * h);
   if (area < minBlobAreaPct || area > maxBlobAreaPct) return null;
+  const pts = buildSilhouette({ ccX, ccY, minX, minY, maxX, maxY, w, h });
   return {
     x: ((minX + maxX) / 2 + 0.5) / w,
     y: ((minY + maxY) / 2 + 0.5) / h,
     w: (maxX - minX + 1) / w,
     h: (maxY - minY + 1) / h,
     colorIndex: ci,
+    pts,
   };
 }
 

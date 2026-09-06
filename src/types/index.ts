@@ -51,6 +51,7 @@ export interface Block {
   photoUrl: string;            // URL de Firebase Storage (WebP)
   categoryColorId: string;
   categoryColorName: string;   // denormalizado
+  categoryColor?: string;      // hex de la categoría (denormalizado, para el anillo del resaltado)
   holdColors: string[];        // array de hex colors
   proposedDifficultyV: number; // 1-14 (0 si proposedDifficultyUnknown)
   proposedDifficultyUnknown?: boolean; // true si el setter marcó "?" en dificultad
@@ -79,6 +80,8 @@ export interface HoldRegion {
   w: number;         // ancho (0-1)
   h: number;         // alto (0-1)
   colorIndex: number; // índice en Block.holdColors
+  /** Silueta/polígono de la presa (normalizado 0-1). Si falta, se dibuja la elipse x/y/w/h. */
+  pts?: { x: number; y: number }[];
 }
 
 /** Intento de un escalador en un bloque (subcolección) */
