@@ -240,7 +240,13 @@ export function HoldHighlightEditor({
   const handleColorTap = (nx: number, ny: number) => {
     const img = imgRef.current;
     if (!img) return;
-    const hex = sampleHoldColor(img, nx, ny);
+    let hex: string | null = null;
+    try {
+      hex = sampleHoldColor(img, nx, ny);
+    } catch {
+      setNotice('No se pudo leer la foto (CORS/origen). Probá con otra imagen.');
+      return;
+    }
     if (!hex) {
       setNotice('No se pudo leer el color ahí. Tocá sobre una presa.');
       return;
@@ -250,7 +256,13 @@ export function HoldHighlightEditor({
       setNotice('Ese color ya está en la ruta. Usá Borrar para quitar presas puntuales que no apliquen.');
       return;
     }
-    const found = detectHolds(img, [hex], { sensitivity });
+    let found: HoldRegion[];
+    try {
+      found = detectHolds(img, [hex], { sensitivity });
+    } catch {
+      setNotice('No se pudo analizar la foto (CORS/origen).');
+      return;
+    }
     if (found.length === 0) {
       setNotice('No se detectaron presas de ese color ahí. Probá otro punto o subí la sensibilidad.');
       return;
