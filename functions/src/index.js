@@ -21,7 +21,9 @@ setGlobalOptions({ region: 'us-central1', memory: '1GiB', timeoutSeconds: 60, mi
 const EMBEDDING_PREFIX = 'hold-embeddings';
 // Umbral de área (fracción del bounding box normalizado) para descartar máscaras que "fugaron"
 // hacia el muro — mismo criterio que `maxBlobAreaPct` del detector local (holdDetection.ts).
-const MAX_AREA_FRAC = 0.35;
+// Ajustado a 0.2 tras simular 4 bloques (20 taps): las máscaras legítimas quedaron todas <=0.135
+// y las fugas confirmadas (incl. camuflaje de color presa/muro) en >=0.282, con separación clara.
+const MAX_AREA_FRAC = 0.2;
 // Cache en memoria del embedding deserializado por instancia tibia: evita releer Storage en
 // cada tap de una misma sesión de edición (varios taps llegan a la misma instancia caliente).
 const warmCache = new Map();
@@ -110,7 +112,7 @@ exports.segmentHoldPoint = onCall(async (request) => {
   }
 
   const { mask, w, h, iou } = await segmentPoint(embedding, x, y);
-  const region = maskToRegion(mask, w, h);
+  const region = maskToRegion(mask, w, h, x * w, y * h);
   if (!region) {
     throw new HttpsError('failed-precondition', 'No se pudo generar un contorno válido para ese punto.');
   }

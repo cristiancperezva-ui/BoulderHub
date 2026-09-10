@@ -91,12 +91,63 @@ function rdpClosed(points, epsilon) {
   return simplified;
 }
 
-/** Convierte una máscara binaria (0/1, w×h) en un polígono normalizado 0-1 listo para HoldRegion.pts. */
-function maskToRegion(mask, w, h) {
-  const boundary = traceOuterBoundary(mask, w, h);
+/**
+ * Aísla el componente conexo (4-conectividad) que contiene el píxel semilla (seedX, seedY).
+ * La máscara binaria "cruda" que devuelve SAM (sigmoid + threshold sobre un mapa de baja
+ * resolución reescalado) a veces trae píxeles sueltos de ruido lejos de la presa real; sin esto,
+ * `traceOuterBoundary` (que arranca en el píxel más arriba-a la izquierda) podía trazar ese
+ * ruido en vez de la presa, devolviendo un contorno diminuto y descartando una máscara válida.
+ */
+function isolateComponent(mask, w, h, seedX, seedY) {
+  const sx = Math.min(w - 1, Math.max(0, Math.round(seedX)));
+  const sy = Math.min(h - 1, Math.max(0, Math.round(seedY)));
+  if (!mask[sy * w + sx]) return mask; // semilla fuera de la máscara: devolver tal cual (caso raro)
+
+  const out = new Uint8Array(w * h);
+  const queue = new Int32Array(w * h);
+  let head = 0, tail = 0;
+  const start = sy * w + sx;
+  queue[tail++] = start;
+  out[start] = 1;
+  while (head < tail) {
+    const idx = queue[head++];
+    const px = idx % w, py = (idx / w) | 0;
+    const neighbors = [
+      px > 0 ? idx - 1 : -1,
+      px < w - 1 ? idx + 1 : -1,
+      py > 0 ? idx - w : -1,
+      py < h - 1 ? idx + w : -1,
+    ];
+    for (const n of neighbors) {
+      if (n >= 0 && mask[n] && !out[n]) {
+        out[n] = 1;
+        queue[tail++] = n;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Convierte una máscara binaria (0/1, w×h) en un polígono normalizado 0-1 listo para HoldRegion.pts.
+ * Si se pasa (seedX, seedY) (el punto que tocó el setter), primero aísla el componente conexo que
+ * contiene ese punto — evita que ruido suelto en la máscara cruda de SAM arruine el trazado.
+ */
+function maskToRegion(mask, w, h, seedX, seedY) {
+  const m = typeof seedX === 'number' ? isolateComponent(mask, w, h, seedX, seedY) : mask;
+  const boundary = traceOuterBoundary(m, w, h);
   if (boundary.length < 4) return null;
-  const epsilon = Math.max(w, h) * 0.004; // ~0.4% del lado mayor, igual criterio que el cliente
-  const simplified = rdpClosed(boundary, epsilon);
+  // Mismo criterio que buildSilhouette() en holdDetection.ts: epsilon fijo y chico (en px), que
+  // solo crece si hay demasiados puntos. Usar una fracción del lado mayor de la imagen completa
+  // (como se hacía antes) era demasiado agresivo para presas chicas/redondas y las colapsaba a
+  // <4 puntos (se rechazaban máscaras perfectamente válidas) — visto en la simulación de bloques.
+  let epsilon = 1.6;
+  let simplified = rdpClosed(boundary, epsilon);
+  let guard = 0;
+  while (simplified.length > 60 && guard++ < 24) {
+    epsilon *= 1.5;
+    simplified = rdpClosed(boundary, epsilon);
+  }
   if (simplified.length < 4) return null;
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -116,4 +167,4 @@ function maskToRegion(mask, w, h) {
   };
 }
 
-module.exports = { traceOuterBoundary, rdpClosed, maskToRegion };
+module.exports = { traceOuterBoundary, rdpClosed, isolateComponent, maskToRegion };

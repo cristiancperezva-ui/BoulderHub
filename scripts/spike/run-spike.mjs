@@ -152,6 +152,10 @@ async function main() {
     '29oQemOf7AG8wtiSj9fq': [[0.25, 0.065], [0.18, 0.2], [0.18, 0.57], [0.43, 0.52], [0.05, 0.27]],
     // Bloque B — iluminación difícil (reflejos de foco cenital + sombras duras en caras del muro)
     '0f2ZyXK0npVFYxIRzsLh': [[0.54, 0.21], [0.47, 0.26], [0.72, 0.5], [0.79, 0.41], [0.15, 0.41]],
+    // Bloque C — presas BLANCAS sobre muro gris claro (bajo contraste de color, buena luz)
+    '6XwWnIcUFGhyCZWzaQ3F': [[0.117, 0.063], [0.55, 0.35], [0.43, 0.556], [0.41, 0.66], [0.81, 0.234]],
+    // Bloque D — presas NEGRAS sobre muro gris (bajo contraste) + puntos de control de color
+    'CQTGwnZVcxD4qqpAoSrb': [[0.43, 0.6], [0.49, 0.46], [0.058, 0.238], [0.3, 0.32], [0.83, 0.28]],
   };
 
   for (const entry of manifest) {
