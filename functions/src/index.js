@@ -24,6 +24,10 @@ const EMBEDDING_PREFIX = 'hold-embeddings';
 // Ajustado a 0.2 tras simular 4 bloques (20 taps): las máscaras legítimas quedaron todas <=0.135
 // y las fugas confirmadas (incl. camuflaje de color presa/muro) en >=0.282, con separación clara.
 const MAX_AREA_FRAC = 0.2;
+// Ninguna presa real debería abarcar más de la mitad del ancho o alto de la foto: atrapa fugas
+// alargadas (ej. una cinta/franja de color en el muro) que el umbral de área por sí solo no ve
+// porque su área total es chica aunque sean muy anchas o muy altas (visto simulando 6 bloques).
+const MAX_DIM_FRAC = 0.5;
 // Cache en memoria del embedding deserializado por instancia tibia: evita releer Storage en
 // cada tap de una misma sesión de edición (varios taps llegan a la misma instancia caliente).
 const warmCache = new Map();
@@ -119,7 +123,7 @@ exports.segmentHoldPoint = onCall(async (request) => {
   // Guardrail de calidad (ver simulación de Fase 0 con fotos de mala iluminación/muro del mismo
   // color que la presa): SAM a veces "fuga" hacia el muro con confianza alta (iou engañoso).
   // Un área de máscara anormalmente grande es la señal más confiable de esa fuga.
-  if (region.w * region.h > MAX_AREA_FRAC) {
+  if (region.w * region.h > MAX_AREA_FRAC || region.w > MAX_DIM_FRAC || region.h > MAX_DIM_FRAC) {
     throw new HttpsError(
       'failed-precondition',
       'La máscara generada es demasiado grande (probable fuga hacia el muro). Tocá más al centro de la presa.',

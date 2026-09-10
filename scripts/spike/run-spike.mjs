@@ -156,6 +156,10 @@ async function main() {
     '6XwWnIcUFGhyCZWzaQ3F': [[0.117, 0.063], [0.55, 0.35], [0.43, 0.556], [0.41, 0.66], [0.81, 0.234]],
     // Bloque D — presas NEGRAS sobre muro gris (bajo contraste) + puntos de control de color
     'CQTGwnZVcxD4qqpAoSrb': [[0.43, 0.6], [0.49, 0.46], [0.058, 0.238], [0.3, 0.32], [0.83, 0.28]],
+    // Bloque E — presas NARANJA en muro MUY recargado (muchas presas de distintos colores muy cerca)
+    'B9N8cZmYeItiZgAvpKYA': [[0.82, 0.253], [0.71, 0.353], [0.73, 0.4125], [0.95, 0.52], [0.82, 0.644]],
+    // Bloque F — presas ROJAS en el muro más recargado de todos (oclusión/clutter extremo)
+    '3QTFndWPEgG08zJ2yHhh': [[0.235, 0.494], [0.375, 0.475], [0.51, 0.494], [0.7125, 0.5625], [0.95, 0.5]],
   };
 
   for (const entry of manifest) {

@@ -5,6 +5,7 @@ const { computeEmbedding, segmentPoint } = require('./src/sam');
 const { maskToRegion } = require('./src/maskToPolygon');
 
 const MAX_AREA_FRAC = 0.2;
+const MAX_DIM_FRAC = 0.5; // ninguna presa real debería abarcar más de la mitad del ancho/alto de la foto
 
 const cases = [
   {
@@ -27,6 +28,16 @@ const cases = [
     file: '../scripts/spike/samples/CQTGwnZVcxD4qqpAoSrb.webp',
     points: [[0.43, 0.6], [0.49, 0.46], [0.058, 0.238], [0.3, 0.32], [0.83, 0.28]],
   },
+  {
+    label: 'Bloque E (presas naranja, muro muy recargado)',
+    file: '../scripts/spike/samples/B9N8cZmYeItiZgAvpKYA.webp',
+    points: [[0.82, 0.253], [0.71, 0.353], [0.73, 0.4125], [0.95, 0.52], [0.82, 0.644]],
+  },
+  {
+    label: 'Bloque F (presas rojas, muro con oclusión/clutter extremo)',
+    file: '../scripts/spike/samples/3QTFndWPEgG08zJ2yHhh.webp',
+    points: [[0.235, 0.494], [0.375, 0.475], [0.51, 0.494], [0.7125, 0.5625], [0.95, 0.5]],
+  },
 ];
 
 async function main() {
@@ -38,9 +49,9 @@ async function main() {
       const { mask, w, h, iou } = await segmentPoint(embedding, x, y);
       const region = maskToRegion(mask, w, h, x * w, y * h);
       const areaFrac = region ? region.w * region.h : null;
-      const rejected = !region || areaFrac > MAX_AREA_FRAC;
+      const rejected = !region || areaFrac > MAX_AREA_FRAC || region.w > MAX_DIM_FRAC || region.h > MAX_DIM_FRAC;
       console.log(
-        `  (${x},${y}) iou=${iou.toFixed(3)} areaFrac=${areaFrac?.toFixed(3)} -> ${rejected ? 'RECHAZADA (fallback local)' : 'OK'}`,
+        `  (${x},${y}) iou=${iou.toFixed(3)} areaFrac=${areaFrac?.toFixed(3)} w=${region?.w.toFixed(3)} h=${region?.h.toFixed(3)} -> ${rejected ? 'RECHAZADA (fallback local)' : 'OK'}`,
       );
     }
   }
