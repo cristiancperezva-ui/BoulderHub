@@ -148,6 +148,10 @@ async function main() {
   const testPoints = {
     '0D7b9BqnaGsPXOnzE6cF': [[0.075, 0.156], [0.29, 0.63], [0.15, 0.08], [0.83, 0.78]],
     '1UVg8fCugnMw9ojVTEBM': [[0.125, 0.25], [0.47, 0.29], [0.67, 0.33], [0.75, 0.5]],
+    // Bloque A — iluminación pareja/uniforme (foto tomada de frente, poca sombra dura)
+    '29oQemOf7AG8wtiSj9fq': [[0.25, 0.065], [0.18, 0.2], [0.18, 0.57], [0.43, 0.52], [0.05, 0.27]],
+    // Bloque B — iluminación difícil (reflejos de foco cenital + sombras duras en caras del muro)
+    '0f2ZyXK0npVFYxIRzsLh': [[0.54, 0.21], [0.47, 0.26], [0.72, 0.5], [0.79, 0.41], [0.15, 0.41]],
   };
 
   for (const entry of manifest) {

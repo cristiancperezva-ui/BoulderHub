@@ -19,6 +19,9 @@ const bucket = admin.storage().bucket();
 setGlobalOptions({ region: 'us-central1', memory: '1GiB', timeoutSeconds: 60, minInstances: 0 });
 
 const EMBEDDING_PREFIX = 'hold-embeddings';
+// Umbral de área (fracción del bounding box normalizado) para descartar máscaras que "fugaron"
+// hacia el muro — mismo criterio que `maxBlobAreaPct` del detector local (holdDetection.ts).
+const MAX_AREA_FRAC = 0.35;
 // Cache en memoria del embedding deserializado por instancia tibia: evita releer Storage en
 // cada tap de una misma sesión de edición (varios taps llegan a la misma instancia caliente).
 const warmCache = new Map();
@@ -110,6 +113,15 @@ exports.segmentHoldPoint = onCall(async (request) => {
   const region = maskToRegion(mask, w, h);
   if (!region) {
     throw new HttpsError('failed-precondition', 'No se pudo generar un contorno válido para ese punto.');
+  }
+  // Guardrail de calidad (ver simulación de Fase 0 con fotos de mala iluminación/muro del mismo
+  // color que la presa): SAM a veces "fuga" hacia el muro con confianza alta (iou engañoso).
+  // Un área de máscara anormalmente grande es la señal más confiable de esa fuga.
+  if (region.w * region.h > MAX_AREA_FRAC) {
+    throw new HttpsError(
+      'failed-precondition',
+      'La máscara generada es demasiado grande (probable fuga hacia el muro). Tocá más al centro de la presa.',
+    );
   }
   return { region, iou };
 });
