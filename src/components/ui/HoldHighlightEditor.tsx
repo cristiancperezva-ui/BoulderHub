@@ -1,7 +1,16 @@
-// ─── Editor de resaltado de presas (para el routesetter) ─────────────────────
-// Muestra la foto con las presas detectadas por color y permite al setter
-// deseleccionar las que pertenecen a otros bloques o agregar las que la
-// detección no captó. Toda la detección corre en el cliente (canvas).
+// ─── Editor de presas del bloque (para el routesetter) ───────────────────────
+// Modelo nuevo (mobile-first):
+//  - La foto ES el editor. Se arma el bloque a base de PRESAS ENTERAS:
+//      · Herramienta por defecto ➕ : tocá una presa para SUMARLA, tocá una ya
+//        marcada para QUITARLA. (con zoom/pan, sin arrastrar puntos)
+//  - 🎨 Por color: tocar una presa detecta TODAS las de ese color pero NO las
+//    marca todavía: quedan como "candidatas" en gris y el setter las confirma
+//    o descarta (y puede tocar las que sobran para excluirlas del lote).
+//  - El bloque SIEMPRE se muestra en UN solo color (el de su categoría), sin
+//    importar los colores físicos de las presas.
+//  - ✂️ Partir sigue disponible para dividir áreas grandes en dos.
+//  - Se eliminó el ajuste fino por puntos (imposible en móvil).
+// Detección 100% en cliente (canvas).
 
 import {
   useCallback,
@@ -11,24 +20,28 @@ import {
   type CSSProperties,
   type PointerEvent as RPointerEvent,
 } from 'react';
-import { Wand2, Plus, Trash2 } from 'lucide-react';
+import { Wand2, Plus, Trash2, ZoomIn, ZoomOut, Maximize, Check, X } from 'lucide-react';
 import { detectHolds, addHoldAt, overlapsAny, sampleHoldColor, regionContains } from '@/lib/holdDetection';
+import { computeHoldEmbedding, addHoldAtML } from '@/lib/holdDetectionRemote';
 import { splitPolygonByLine, polygonArea, regionToPath, regionToPts } from '@/lib/holdGeometry';
 import { HoldOverlay } from '@/components/HoldOverlay';
 import type { HoldRegion } from '@/types';
 
 interface HoldHighlightEditorProps {
   src: string;
+  /** Colores físicos detectados/usados (se auto-completan al tocar presas). */
   holdColors: string[];
   value: HoldRegion[];
   onChange: (regions: HoldRegion[]) => void;
-  /** Color del anillo/contorno iluminado (color de Categoría del bloque). */
-  ringColor?: string;
-  /** Agrega a la paleta un color físico detectado al tocar una presa en la foto. */
+  /** Color uniforme del bloque (categoría). Si no viene, se usa un acento por defecto. */
+  color?: string;
+  /** Para notificar colores físicos nuevos detectados. */
   onHoldColorsChange?: (colors: string[]) => void;
 }
 
-type Tool = 'color' | 'erase' | 'add' | 'split' | 'shape';
+type Tool = 'add' | 'color' | 'split';
+
+const DEFAULT_BLOCK = '#863bff';
 
 const chipStyle: CSSProperties = {
   display: 'flex',
@@ -48,18 +61,33 @@ const toolBtn: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: '0.375rem',
-  padding: '0.4rem 0.75rem',
+  padding: '0.5rem 0.8rem',
   background: 'var(--color-bg-base)',
   border: 'none',
   color: 'var(--color-text-secondary)',
   fontSize: '0.8rem',
   fontWeight: 600,
   cursor: 'pointer',
+  touchAction: 'manipulation',
 };
 
 const toolBtnActive: CSSProperties = {
   background: 'rgba(134,59,255,0.15)',
   color: 'var(--color-accent-primary)',
+};
+
+const zoomBtn: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 36,
+  height: 36,
+  borderRadius: '0.5rem',
+  background: 'rgba(0,0,0,0.65)',
+  border: '1px solid rgba(255,255,255,0.18)',
+  color: '#fff',
+  cursor: 'pointer',
+  backdropFilter: 'blur(2px)',
 };
 
 function clamp01(v: number): number {
@@ -112,79 +140,216 @@ function ringToRegion(ring: Array<readonly [number, number]>, colorIndex: number
   return ptsToRegion(pts, colorIndex);
 }
 
+type PendingSource = { kind: 'all'; colors: string[] } | { kind: 'one'; color: string };
+
 export function HoldHighlightEditor({
   src,
   holdColors,
   value,
   onChange,
-  ringColor,
+  color,
   onHoldColorsChange,
 }: HoldHighlightEditorProps) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const viewRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [imgReady, setImgReady] = useState(false);
-  const [sensitivity, setSensitivity] = useState(50);
   const [detecting, setDetecting] = useState(false);
-  const [tool, setTool] = useState<Tool>('color');
+  const [tool, setTool] = useState<Tool>('add');
   const [notice, setNotice] = useState<string | null>(null);
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [splitLine, setSplitLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [pending, setPending] = useState<HoldRegion[] | null>(null);
+  const [sensitivity, setSensitivity] = useState(45);
+
+  // Zoom/pan
+  const [view, setView] = useState<{ scale: number; pan: { x: number; y: number } }>({ scale: 1, pan: { x: 0, y: 0 } });
+  const viewRef2 = useRef(view);
+  viewRef2.current = view;
   const autoRan = useRef<string | null>(null);
-  const dragRef = useRef<{ kind: 'split'; ax: number; ay: number } | { kind: 'node'; regionIdx: number; vertexIdx: number } | null>(null);
+  const splitStart = useRef<{ x: number; y: number } | null>(null);
+  const [splitLine, setSplitLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+
+  // Segmentación con IA (SlimSAM en la nube): se calcula 1 vez por foto al abrir el editor.
+  // Si falla (offline, backend caído), `addSingleHold` cae de vuelta a la detección local por color.
+  const [embeddingId, setEmbeddingId] = useState<string | null>(null);
+  const embeddingRan = useRef<string | null>(null);
+
   const valueRef = useRef(value);
   const holdColorsRef = useRef(holdColors);
   valueRef.current = value;
   holdColorsRef.current = holdColors;
 
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  const pendingSource = useRef<PendingSource | null>(null);
+
+  // Gestos (tap/pan/pinch/split)
+  const pointers = useRef(new Map<number, { lx: number; ly: number }>());
+  const gesture = useRef<
+    | { kind: 'none' }
+    | { kind: 'maybe'; sx: number; sy: number; basePan: { x: number; y: number } }
+    | { kind: 'pan'; sx: number; sy: number; basePan: { x: number; y: number } }
+    | { kind: 'pinch'; dist0: number; scale0: number; lx0: number; ly0: number; basePan: { x: number; y: number } }
+    | { kind: 'split' }
+  >({ kind: 'none' });
+
   const colorsKey = holdColors.join(',');
   const autoKey = `${src}|${colorsKey}`;
 
-  const runDetection = useCallback(
-    async (sens: number) => {
+  const MIN_SCALE = 1;
+  const MAX_SCALE = 8;
+  const TAP_MOVE = 10; // px
+
+  // ─── Zoom helpers ──────────────────────────────────────────────────────────
+  const clampScale = (s: number) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
+
+  const clampPan = (pan: { x: number; y: number }, s: number, bw: number, bh: number) => {
+    if (s <= 1.0001) return { x: 0, y: 0 };
+    const minX = bw - s * bw;
+    const minY = bh - s * bh;
+    const margin = 0;
+    return {
+      x: Math.max(minX - margin, Math.min(margin, pan.x)),
+      y: Math.max(minY - margin, Math.min(margin, pan.y)),
+    };
+  };
+
+  const applyView = (scale: number, pan: { x: number; y: number }) => {
+    const s = clampScale(scale);
+    const el = contentRef.current;
+    const bw = el?.offsetWidth ?? viewRef.current?.clientWidth ?? 1;
+    const bh = el?.offsetHeight ?? 1;
+    const p = clampPan(pan, s, bw, bh);
+    setView({ scale: s, pan: p });
+  };
+
+  /** Aplica zoom de factor `f` anclado al punto local (viewport) (lx, ly). */
+  const zoomAt = (f: number, lx?: number, ly?: number) => {
+    const v = viewRef2.current;
+    const vp = viewRef.current;
+    const bw = contentRef.current?.offsetWidth ?? vp?.clientWidth ?? 1;
+    const bh = contentRef.current?.offsetHeight ?? 1;
+    const cx = lx ?? (vp?.clientWidth ?? bw) / 2;
+    const cy = ly ?? (vp?.clientHeight ?? bh) / 2;
+    const s = clampScale(v.scale * f);
+    if (s === v.scale) return;
+    // Punto de la imagen que hoy está bajo (cx,cy)
+    const ix = (cx - v.pan.x) / v.scale;
+    const iy = (cy - v.pan.y) / v.scale;
+    const pan = { x: cx - ix * s, y: cy - iy * s };
+    applyView(s, clampPan(pan, s, bw, bh));
+  };
+
+  const resetZoom = () => {
+    gesture.current = { kind: 'none' };
+    applyView(1, { x: 0, y: 0 });
+  };
+
+  useEffect(() => {
+    resetZoom();
+    setImgReady(false);
+    const img = imgRef.current;
+    if (img && img.complete) setImgReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
+
+  useEffect(() => {
+    if (!src || embeddingRan.current === src) return;
+    embeddingRan.current = src;
+    setEmbeddingId(null);
+    computeHoldEmbedding(src)
+      .then((id) => setEmbeddingId(id))
+      .catch((err) => console.warn('No se pudo calcular el embedding IA, se usará detección local:', err));
+  }, [src]);
+
+  // ─── Detección ─────────────────────────────────────────────────────────────
+  const runDetect = useCallback(
+    async (colorsArr: string[], sens: number) => {
       const img = imgRef.current;
-      if (!img || holdColors.length === 0) return;
+      if (!img || colorsArr.length === 0) return null;
       setDetecting(true);
       setNotice(null);
-      await new Promise((r) => setTimeout(r, 40)); // dejar que pinte "Detectando…"
+      await new Promise((r) => setTimeout(r, 30));
       try {
-        const regions = detectHolds(img, holdColors, { sensitivity: sens });
-        onChange(regions);
-        if (regions.length === 0) {
-          setNotice('No se detectaron presas con estos colores. Baja la sensibilidad o agrégalas con el modo ➕.');
-        }
+        return detectHolds(img, colorsArr, { sensitivity: sens });
       } catch {
         setNotice('No se pudo analizar la foto (problema de CORS/origen).');
+        return null;
       } finally {
         setDetecting(false);
       }
     },
-    [holdColors, onChange],
+    [],
   );
 
-  // Resetear el estado "imagen lista" cuando cambia la foto.
-  useEffect(() => {
-    setImgReady(false);
+  /** Detecta en lote y muestra el resultado como CANDIDATAS (pendiente de confirmar). */
+  const showPending = async (source: PendingSource, sens: number) => {
     const img = imgRef.current;
-    if (img && img.complete) setImgReady(true);
-  }, [src]);
+    if (!img) return;
+    const regions = await runDetect(source.kind === 'all' ? source.colors : [source.color], sens);
+    if (!regions) return;
+    if (regions.length === 0) {
+      setPending([]);
+      pendingSource.current = source;
+      setNotice(
+        source.kind === 'one'
+          ? 'No se detectaron presas de ese color. Subí la sensibilidad o usá ➕ para tocar la presa puntual.'
+          : 'No se detectaron presas con estos colores. Probá ajustar la sensibilidad.',
+      );
+      return;
+    }
+    pendingSource.current = source;
+    setPending(regions);
+    setNotice(
+      `${regions.length} presa${regions.length === 1 ? '' : 's'} detectada${regions.length === 1 ? '' : 's'} como candidata${regions.length === 1 ? '' : 's'}. Tocá las que sobren para excluirlas y confirmá.`,
+    );
+  };
 
-  // Auto-detección: solo la primera vez que aparece esta foto+colores y no hay
-  // regiones manuales todavía (si el setter ya refinó, no se vuelve a ejecutar).
+  // Auto-detección inicial: solo la primera vez que aparece esta foto+colores y
+  // no hay presas marcadas todavía. Se muestra como candidatas (no se marca solo).
   useEffect(() => {
     if (!imgReady || holdColors.length === 0 || !src) return;
     if (autoRan.current === autoKey) return;
-    if (value.length > 0) {
-      autoRan.current = autoKey;
-      return;
-    }
     autoRan.current = autoKey;
-    void runDetection(sensitivity);
+    if (value.length > 0) return;
+    void showPending({ kind: 'all', colors: holdColors }, sensitivity);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imgReady, autoKey, src, holdColors.length]);
 
+  // ─── Mutaciones sobre el bloque (value) ───────────────────────────────────
+  const commitRemove = (regionIdx: number) => {
+    const cur = valueRef.current;
+    if (regionIdx < 0 || regionIdx >= cur.length) return;
+    onChange(cur.filter((_, i) => i !== regionIdx));
+    setNotice('Presa quitada del bloque.');
+  };
+
+  const confirmPending = () => {
+    const list = pendingRef.current;
+    if (!list || list.length === 0) {
+      setPending(null);
+      pendingSource.current = null;
+      return;
+    }
+    const existing = valueRef.current;
+    const added = list.filter((r) => !overlapsAny(existing, r, 0.35));
+    onChange([...existing, ...added]);
+    setPending(null);
+    pendingSource.current = null;
+    setNotice(`Se marcaron ${added.length} presa${added.length === 1 ? '' : 's'}.`);
+  };
+
+  const cancelPending = () => {
+    setPending(null);
+    pendingSource.current = null;
+    setNotice(null);
+  };
+
   const handleSensitivity = (v: number) => {
     setSensitivity(v);
-    autoRan.current = autoKey;
-    void runDetection(v);
+    const src = pendingSource.current;
+    if (pendingRef.current !== null && src) {
+      void showPending(src, v);
+    }
   };
 
   const handleRedetect = () => {
@@ -193,51 +358,32 @@ export function HoldHighlightEditor({
       if (!ok) return;
     }
     autoRan.current = autoKey;
-    setSelectedIdx(null);
-    void runDetection(sensitivity);
+    setPending(null);
+    pendingSource.current = null;
+    const colors = holdColorsRef.current;
+    if (colors.length > 0) {
+      void showPending({ kind: 'all', colors }, sensitivity);
+    } else {
+      setNotice('Tocá las presas del bloque con ➕ (se suman de a una) o usá 🎨 para detectar un color.');
+    }
   };
 
   const handleClear = () => {
     onChange([]);
-    setSelectedIdx(null);
-    setNotice('Presas limpiadas. Tocá una presa en la foto (🎨) para iluminar todas las de su color, o usá la paleta.');
+    setPending(null);
+    pendingSource.current = null;
+    setNotice('Presas limpiadas. Tocá una presa en la foto para sumarla al bloque.');
   };
 
   const selectTool = (t: Tool) => {
     setTool(t);
     setSplitLine(null);
-    dragRef.current = null;
-    if (t !== 'shape') setSelectedIdx(null);
+    splitStart.current = null;
     setNotice(null);
   };
 
-  const getPt = (e: RPointerEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return { x, y };
-  };
-
-  // ─── Mutaciones sobre `value` (siempre contra el último valor conocido) ──
-  const commitPatch = (regionIdx: number, makeNext: (r: HoldRegion) => HoldRegion) => {
-    const cur = valueRef.current;
-    if (regionIdx < 0 || regionIdx >= cur.length) return;
-    const next = [...cur];
-    next[regionIdx] = makeNext(next[regionIdx]);
-    onChange(next);
-  };
-
-  const commitRemove = (regionIdx: number) => {
-    const cur = valueRef.current;
-    if (regionIdx < 0 || regionIdx >= cur.length) return;
-    onChange(cur.filter((_, i) => i !== regionIdx));
-    if (selectedIdx === regionIdx) setSelectedIdx(null);
-    else if (selectedIdx !== null && regionIdx < selectedIdx) setSelectedIdx(selectedIdx - 1);
-  };
-
-  /** Herramienta 🎨: tocar una presa ilumina TODAS las del mismo color. */
-  const handleColorTap = (nx: number, ny: number) => {
+  // ─── Herramienta ➕ : sumar/quitar presa tocándola ─────────────────────────
+  const addSingleHold = async (nx: number, ny: number) => {
     const img = imgRef.current;
     if (!img) return;
     let hex: string | null = null;
@@ -248,72 +394,73 @@ export function HoldHighlightEditor({
       return;
     }
     if (!hex) {
+      setNotice('No se pudo leer el color ahí. Tocá justo sobre una presa.');
+      return;
+    }
+    const colors = holdColorsRef.current;
+    let idx = colors.indexOf(hex);
+    if (idx < 0) idx = colors.length;
+
+    // 1) Intentar segmentación IA (SlimSAM en la nube): mejor calidad de contorno.
+    if (embeddingId) {
+      setDetecting(true);
+      try {
+        const region = await addHoldAtML(embeddingId, nx, ny, idx);
+        if (overlapsAny(valueRef.current, region)) {
+          setNotice('Esa presa ya está en el bloque.');
+          return;
+        }
+        if (idx >= colors.length) onHoldColorsChange?.([...colors, hex]);
+        onChange([...valueRef.current, region]);
+        setNotice('Presa sumada al bloque (IA). Tocá una ya marcada para quitarla.');
+        return;
+      } catch (err) {
+        console.warn('Segmentación IA falló, se usa detección local:', err);
+      } finally {
+        setDetecting(false);
+      }
+    }
+
+    // 2) Fallback local (HSV + flood-fill): sin conexión o error del backend.
+    try {
+      const region = addHoldAt(img, [hex], nx, ny, { sensitivity });
+      if (!region) {
+        setNotice('No se detectó una presa ahí. Tocá sobre la presa (sin agarrar el muro).');
+        return;
+      }
+      if (overlapsAny(valueRef.current, region)) {
+        setNotice('Esa presa ya está en el bloque.');
+        return;
+      }
+      region.colorIndex = idx;
+      if (idx >= colors.length) onHoldColorsChange?.([...colors, hex]);
+      onChange([...valueRef.current, region]);
+      setNotice('Presa sumada al bloque. Tocá una ya marcada para quitarla.');
+    } catch {
+      setNotice('No se pudo analizar la foto (CORS/origen).');
+    }
+  };
+
+  const startColorBatch = async (nx: number, ny: number) => {
+    const img = imgRef.current;
+    if (!img) return;
+    let hex: string | null = null;
+    try {
+      hex = sampleHoldColor(img, nx, ny);
+    } catch {
+      setNotice('No se pudo leer la foto (CORS/origen).');
+      return;
+    }
+    if (!hex) {
       setNotice('No se pudo leer el color ahí. Tocá sobre una presa.');
       return;
     }
     const colors = holdColorsRef.current;
-    if (colors.includes(hex)) {
-      setNotice('Ese color ya está en la ruta. Usá Borrar para quitar presas puntuales que no apliquen.');
-      return;
-    }
-    let found: HoldRegion[];
-    try {
-      found = detectHolds(img, [hex], { sensitivity });
-    } catch {
-      setNotice('No se pudo analizar la foto (CORS/origen).');
-      return;
-    }
-    if (found.length === 0) {
-      setNotice('No se detectaron presas de ese color ahí. Probá otro punto o subí la sensibilidad.');
-      return;
-    }
-    const newIndex = colors.length;
-    const added = found
-      .map((r) => ({ ...r, colorIndex: newIndex }))
-      .filter((r) => !overlapsAny(valueRef.current, r, 0.45));
-    if (added.length === 0) {
-      setNotice('Esas presas ya estaban marcadas.');
-      return;
-    }
-    onChange([...valueRef.current, ...added]);
-    onHoldColorsChange?.([...colors, hex]);
-    setNotice(`Iluminadas ${added.length} presa${added.length === 1 ? '' : 's'} de color ${hex}.`);
+    if (!colors.includes(hex)) onHoldColorsChange?.([...colors, hex]);
+    await showPending({ kind: 'one', color: hex }, sensitivity);
   };
 
-  /** Herramienta Borrar: quita una sola presa (tocar sobre su silueta). */
-  const handleErase = (nx: number, ny: number) => {
-    const list = valueRef.current;
-    const idx = list.findIndex((r) => regionContains(r, nx, ny));
-    if (idx >= 0) {
-      commitRemove(idx);
-      setNotice(null);
-    } else {
-      setNotice('Tocá sobre una presa iluminada para borrarla.');
-    }
-  };
-
-  /** Herramienta Agregar: flood fill de una presa del color elegido en la paleta. */
-  const handleAdd = (nx: number, ny: number) => {
-    const img = imgRef.current;
-    const colors = holdColorsRef.current;
-    if (!img || colors.length === 0) {
-      setNotice('Agregá primero un color en la paleta (o tocá una presa con 🎨).');
-      return;
-    }
-    try {
-      const region = addHoldAt(img, colors, nx, ny, { sensitivity });
-      if (region && !overlapsAny(valueRef.current, region)) {
-        onChange([...valueRef.current, region]);
-        setNotice(null);
-      } else if (!region) {
-        setNotice('No hay una presa de esos colores ahí. Probá otro punto o ajustá la sensibilidad.');
-      }
-    } catch {
-      setNotice('No se pudo analizar la foto (problema de CORS/origen).');
-    }
-  };
-
-  /** Herramienta Partir: corta la presa con una línea (descarta pedazos minúsculos). */
+  // ─── Herramienta ✂️ Partir ────────────────────────────────────────────────
   const doSplit = (pa: { x: number; y: number }, pb: { x: number; y: number }) => {
     const list = valueRef.current;
     const regionIdx = list.findIndex((r) => regionContains(r, pa.x, pa.y));
@@ -339,167 +486,152 @@ export function HoldHighlightEditor({
     const next = list.filter((_, i) => i !== regionIdx);
     next.splice(Math.min(regionIdx, next.length), 0, ...pieces);
     onChange(next);
-    setSelectedIdx(null);
     setNotice(pieces.length === 1 ? 'Presa recortada (se descartó el pedazo chico).' : 'Presa partida en dos.');
   };
 
-  // ─── Herramienta Ajustar (forma): nodos arrastrables + agregar/borrar vértice ──
-  const VERTEX_R = 16;
-  const EDGE_R = 13;
-
-  const addVertexNear = (regionIdx: number, edgeStartIdx: number, p: { x: number; y: number }) => {
-    commitPatch(regionIdx, (r) => {
-      const pts = regionToPts(r);
-      const next = [...pts];
-      next.splice(edgeStartIdx + 1, 0, { x: clamp01(p.x), y: clamp01(p.y) });
-      return ptsToRegion(next, r.colorIndex);
-    });
-  };
-
-  const handleShapeDown = (pt: { x: number; y: number }, rect: DOMRect) => {
-    const list = valueRef.current;
-    if (selectedIdx === null || selectedIdx >= list.length) {
-      const idx = list.findIndex((r) => regionContains(r, pt.x, pt.y));
-      setSelectedIdx(idx >= 0 ? idx : null);
-      return;
-    }
-    const src = list[selectedIdx];
-    const pts = regionToPts(src);
-    const px = pt.x * rect.width;
-    const py = pt.y * rect.height;
-
-    for (let i = 0; i < pts.length; i++) {
-      const dx = pts[i].x * rect.width - px;
-      const dy = pts[i].y * rect.height - py;
-      if (Math.hypot(dx, dy) <= VERTEX_R) {
-        dragRef.current = { kind: 'node', regionIdx: selectedIdx, vertexIdx: i };
-        return;
+  // ─── Taps (punto normalizado 0-1) ─────────────────────────────────────────
+  const handleTap = async (nx: number, ny: number) => {
+    // Si hay candidatas pendientes, tocar una la excluye del lote.
+    if (pendingRef.current) {
+      const list = pendingRef.current;
+      const idx = list.findIndex((r) => regionContains(r, nx, ny));
+      if (idx >= 0) {
+        const next = list.filter((_, i) => i !== idx);
+        setPending(next);
+        setNotice(next.length === 0 ? 'Quedan 0 candidatas. Descartá o subí la sensibilidad.' : `Candidata excluida. Quedan ${next.length}. Confirmá para marcar.`);
+      } else {
+        setNotice('Tocá una presa en gris (candidata) para excluirla del lote.');
       }
-    }
-    // Agregar vértice al tocar un borde
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i];
-      const b = pts[(i + 1) % pts.length];
-      const ax = a.x * rect.width;
-      const ay = a.y * rect.height;
-      const bx = b.x * rect.width;
-      const by = b.y * rect.height;
-      const vx = bx - ax;
-      const vy = by - ay;
-      const L2 = vx * vx + vy * vy;
-      if (L2 < 1e-9) continue;
-      const t = ((px - ax) * vx + (py - ay) * vy) / L2;
-      if (t < 0.04 || t > 0.96) continue;
-      const qx = ax + vx * t;
-      const qy = ay + vy * t;
-      if (Math.hypot(qx - px, qy - py) > EDGE_R) continue;
-      addVertexNear(selectedIdx, i, { x: qx / rect.width, y: qy / rect.height });
-      setNotice('Vértice agregado. Arrastrá los puntos para ajustar el contorno.');
       return;
     }
-    if (!regionContains(src, pt.x, pt.y)) {
-      const other = list.findIndex((r, i) => i !== selectedIdx && regionContains(r, pt.x, pt.y));
-      setSelectedIdx(other >= 0 ? other : null);
+    if (tool === 'color') {
+      await startColorBatch(nx, ny);
+      return;
     }
-  };
-
-  const handleDeleteVertex = (pt: { x: number; y: number }, rect: DOMRect) => {
+    // ➕ toggle: quitar si ya está marcada; si no, sumarla.
     const list = valueRef.current;
-    if (selectedIdx === null || selectedIdx >= list.length) return;
-    const pts = regionToPts(list[selectedIdx]);
-    if (pts.length <= 4) {
-      setNotice('Una presa necesita al menos 3 puntos.');
-      return;
-    }
-    const px = pt.x * rect.width;
-    const py = pt.y * rect.height;
-    for (let i = 0; i < pts.length; i++) {
-      const dx = pts[i].x * rect.width - px;
-      const dy = pts[i].y * rect.height - py;
-      if (Math.hypot(dx, dy) <= VERTEX_R + 2) {
-        commitPatch(selectedIdx, (r) => {
-          const arr = regionToPts(r);
-          arr.splice(i, 1);
-          return ptsToRegion(arr, r.colorIndex);
-        });
-        setNotice('Vértice borrado (doble toque en un punto).');
-        return;
-      }
+    const hit = list.findIndex((r) => regionContains(r, nx, ny));
+    if (hit >= 0) {
+      commitRemove(hit);
+    } else {
+      addSingleHold(nx, ny);
     }
   };
 
-  // ─── Puntero unificado sobre la foto ─────────────────────────────────────
-  const handlePointerDown = (e: RPointerEvent<SVGSVGElement>) => {
+  // ─── Gestos sobre la foto (tap / pan / pinch / split) ─────────────────────
+  const localPt = (e: RPointerEvent<SVGSVGElement>) => {
+    const rect = viewRef.current?.getBoundingClientRect();
+    return { lx: e.clientX - (rect?.left ?? 0), ly: e.clientY - (rect?.top ?? 0) };
+  };
+
+  const svgPt = (e: RPointerEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x, y };
+  };
+
+  const onPointerDown = (e: RPointerEvent<SVGSVGElement>) => {
     if (detecting) return;
-    if (e.button !== 0) return;
-    const img = imgRef.current;
-    if (!img) return;
-    const pt = getPt(e);
-    if (!pt) return;
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (!imgReady) return;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* noop */
     }
-    const rect = e.currentTarget.getBoundingClientRect();
-
-    if (tool === 'split') {
-      dragRef.current = { kind: 'split', ax: pt.x, ay: pt.y };
-      setSplitLine({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
-      return;
+    const { lx, ly } = localPt(e);
+    pointers.current.set(e.pointerId, { lx, ly });
+    if (pointers.current.size === 1) {
+      if (tool === 'split' && !pendingRef.current) {
+        gesture.current = { kind: 'split' };
+        const pt = svgPt(e);
+        if (pt) {
+          splitStart.current = pt;
+          setSplitLine({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
+        }
+        return;
+      }
+      gesture.current = { kind: 'maybe', sx: lx, sy: ly, basePan: { ...viewRef2.current.pan } };
+    } else if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.max(1, Math.hypot(b.lx - a.lx, b.ly - a.ly));
+      gesture.current = {
+        kind: 'pinch',
+        dist0: dist,
+        scale0: viewRef2.current.scale,
+        lx0: (a.lx + b.lx) / 2,
+        ly0: (a.ly + b.ly) / 2,
+        basePan: { ...viewRef2.current.pan },
+      };
     }
-    if (tool === 'shape') {
-      handleShapeDown(pt, rect);
-      return;
-    }
-    if (tool === 'color') {
-      handleColorTap(pt.x, pt.y);
-      return;
-    }
-    if (tool === 'erase') {
-      handleErase(pt.x, pt.y);
-      return;
-    }
-    handleAdd(pt.x, pt.y);
   };
 
-  const handlePointerMove = (e: RPointerEvent<SVGSVGElement>) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const pt = getPt(e);
-    if (!pt) return;
-    if (d.kind === 'split') {
-      setSplitLine({ x1: d.ax, y1: d.ay, x2: pt.x, y2: pt.y });
+  const onPointerMove = (e: RPointerEvent<SVGSVGElement>) => {
+    const { lx, ly } = localPt(e);
+    pointers.current.set(e.pointerId, { lx, ly });
+    const g = gesture.current;
+    if (g.kind === 'split') {
+      const pt = svgPt(e);
+      if (pt && splitStart.current) {
+        setSplitLine({ x1: splitStart.current.x, y1: splitStart.current.y, x2: pt.x, y2: pt.y });
+      }
       return;
     }
-    // Arrastrar un vértice de la presa seleccionada
-    const list = valueRef.current;
-    if (d.regionIdx < 0 || d.regionIdx >= list.length) return;
-    commitPatch(d.regionIdx, (r) => {
-      const pts = regionToPts(r).map((p, i) => (i === d.vertexIdx ? { x: clamp01(pt.x), y: clamp01(pt.y) } : { ...p }));
-      return ptsToRegion(pts, r.colorIndex);
-    });
+    if (g.kind === 'pinch' && pointers.current.size >= 2) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.max(1, Math.hypot(b.lx - a.lx, b.ly - a.ly));
+      const s = clampScale(g.scale0 * (dist / g.dist0));
+      const v = viewRef2.current;
+      const bw = contentRef.current?.offsetWidth ?? viewRef.current?.clientWidth ?? 1;
+      const bh = contentRef.current?.offsetHeight ?? 1;
+      const ix = (g.lx0 - v.pan.x) / v.scale;
+      const iy = (g.ly0 - v.pan.y) / v.scale;
+      const pan = { x: g.lx0 - ix * s, y: g.ly0 - iy * s };
+      applyView(s, clampPan(pan, s, bw, bh));
+      return;
+    }
+    if (g.kind === 'maybe') {
+      const dx = lx - g.sx;
+      const dy = ly - g.sy;
+      if (Math.hypot(dx, dy) > TAP_MOVE) {
+        gesture.current = { kind: 'pan', sx: g.sx, sy: g.sy, basePan: g.basePan };
+      }
+      return;
+    }
+    if (g.kind === 'pan') {
+      const pan = { x: g.basePan.x + (lx - g.sx), y: g.basePan.y + (ly - g.sy) };
+      const s = viewRef2.current.scale;
+      const bw = contentRef.current?.offsetWidth ?? viewRef.current?.clientWidth ?? 1;
+      const bh = contentRef.current?.offsetHeight ?? 1;
+      applyView(s, clampPan(pan, s, bw, bh));
+    }
   };
 
-  const handlePointerUp = (e: RPointerEvent<SVGSVGElement>) => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    const pt = getPt(e);
-    if (!pt) return;
-    if (d?.kind === 'split') {
+  const onPointerUp = (e: RPointerEvent<SVGSVGElement>) => {
+    const g = gesture.current;
+    pointers.current.delete(e.pointerId);
+    if (g.kind === 'split') {
+      const pt = svgPt(e);
+      const pa = splitStart.current;
+      splitStart.current = null;
       setSplitLine(null);
-      doSplit({ x: d.ax, y: d.ay }, { x: pt.x, y: pt.y });
+      if (pa && pt) doSplit(pa, pt);
+    } else if (g.kind === 'maybe' && pointers.current.size === 0) {
+      const pt = svgPt(e);
+      if (pt) void handleTap(pt.x, pt.y);
     }
-  };
-
-  const handlePointerDouble = (e: RPointerEvent<SVGSVGElement>) => {
-    if (tool !== 'shape') return;
-    const pt = getPt(e);
-    if (!pt) return;
-    handleDeleteVertex(pt, e.currentTarget.getBoundingClientRect());
+    if (g.kind === 'pinch' && pointers.current.size < 2) {
+      gesture.current = { kind: 'none' };
+      pointers.current.clear();
+      return;
+    }
+    if (pointers.current.size === 0) gesture.current = { kind: 'none' };
   };
 
   const hasColors = holdColors.length > 0;
+  const pendingCount = pending?.length ?? 0;
 
   return (
     <div
@@ -510,6 +642,7 @@ export function HoldHighlightEditor({
         padding: '0.875rem',
       }}
     >
+      {/* Encabezado */}
       <div
         style={{
           display: 'flex',
@@ -521,16 +654,16 @@ export function HoldHighlightEditor({
         }}
       >
         <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontWeight: 500 }}>
-          ✨ Resaltar presas{' '}
+          ✨ Presas del bloque{' '}
           <span style={{ fontWeight: 400, fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-            ({value.length} presas)
+            ({value.length} marcadas{pendingCount > 0 ? ` · ${pendingCount} candidatas` : ''})
           </span>
         </span>
         <div style={{ display: 'flex', gap: '0.375rem' }}>
           <button onClick={handleRedetect} disabled={detecting || !hasColors} style={chipStyle}>
             <Wand2 size={14} /> Re-detectar
           </button>
-          <button onClick={handleClear} disabled={detecting || value.length === 0} style={chipStyle}>
+          <button onClick={handleClear} disabled={value.length === 0 && pendingCount === 0} style={chipStyle}>
             <Trash2 size={14} /> Quitar todas
           </button>
         </div>
@@ -538,81 +671,127 @@ export function HoldHighlightEditor({
 
       {!src ? (
         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', margin: 0 }}>
-          Sube una foto del bloque para resaltar las presas.
+          Sube una foto del bloque para marcar las presas.
         </p>
       ) : (
         <>
-          <div style={{ position: 'relative', width: '100%', marginBottom: '0.625rem', touchAction: 'none' }}>
-            <img
-              ref={imgRef}
-              src={src}
-              alt="Foto para resaltar presas"
-              crossOrigin="anonymous"
-              onLoad={() => setImgReady(true)}
+          {/* Foto editable (zoom + pan) */}
+          <div
+            ref={viewRef}
+            style={{
+              position: 'relative',
+              width: '100%',
+              overflow: 'hidden',
+              borderRadius: '0.5rem',
+              background: '#000',
+              touchAction: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              marginBottom: '0.625rem',
+            }}
+          >
+            <div
+              ref={contentRef}
               style={{
+                transform: `translate(${view.pan.x}px, ${view.pan.y}px) scale(${view.scale})`,
+                transformOrigin: '0 0',
                 width: '100%',
-                height: 'auto',
-                display: 'block',
-                borderRadius: '0.5rem',
-                userSelect: 'none',
-              }}
-            />
-            <HoldOverlay regions={value} colors={holdColors} ringColor={ringColor} />
-            <svg
-              viewBox="0 0 1 1"
-              preserveAspectRatio="none"
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onDoubleClick={handlePointerDouble}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                cursor:
-                  tool === 'split'
-                    ? 'crosshair'
-                    : tool === 'shape'
-                      ? 'grab'
-                      : tool === 'erase'
-                        ? 'pointer'
-                        : 'copy',
-                touchAction: 'none',
-                pointerEvents: 'all',
+                willChange: 'transform',
               }}
             >
-              <rect x={0} y={0} width={1} height={1} fill="transparent" />
-
-              {/* Presa seleccionada (Ajustar): contorno + nodos */}
-              {tool === 'shape' && selectedIdx !== null && value[selectedIdx] && (() => {
-                const sel = value[selectedIdx];
-                const d = regionToPath(sel);
-                const pts = regionToPts(sel);
-                return (
-                  <g>
-                    {d && <path d={d} fill="none" stroke="#000000" strokeOpacity={0.55} strokeWidth={0.006} />}
-                    {d && <path d={d} fill="none" stroke="#ffffff" strokeWidth={0.0028} strokeDasharray="0.012 0.008" />}
-                    {pts.map((p, i) => (
-                      <circle key={i} cx={p.x} cy={p.y} r={0.014} fill="#ffffff" stroke="var(--color-accent-primary, #863bff)" strokeWidth={0.0022} />
-                    ))}
-                  </g>
-                );
-              })()}
-
-              {/* Línea de corte (Partir) */}
-              {splitLine && (
-                <line
-                  x1={splitLine.x1}
-                  y1={splitLine.y1}
-                  x2={splitLine.x2}
-                  y2={splitLine.y2}
-                  stroke="#ffffff"
-                  strokeWidth={0.004}
-                  strokeDasharray="0.01 0.008"
-                />
+              <img
+                ref={imgRef}
+                src={src}
+                alt="Foto para marcar presas"
+                crossOrigin="anonymous"
+                draggable={false}
+                onLoad={() => setImgReady(true)}
+                style={{ width: '100%', height: 'auto', display: 'block', pointerEvents: 'none' }}
+              />
+              {/* Presas marcadas: color UNIFORME del bloque */}
+              <HoldOverlay regions={value} colors={holdColors} color={color ?? DEFAULT_BLOCK} />
+              {/* Candidatas pendientes: contorno neutro gris */}
+              {pending && pending.length > 0 && (
+                <svg viewBox="0 0 1 1" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-hidden="true">
+                  {pending.map((r, i) => {
+                    const d = regionToPath(r);
+                    if (!d) return null;
+                    return (
+                      <path
+                        key={i}
+                        d={d}
+                        fill="#ffffff"
+                        fillOpacity={0.08}
+                        stroke="#cbd5e1"
+                        strokeWidth={0.003}
+                        strokeDasharray="0.008 0.006"
+                        strokeLinejoin="round"
+                      />
+                    );
+                  })}
+                </svg>
               )}
-            </svg>
+              {/* Capa de interacción */}
+              <svg
+                viewBox="0 0 1 1"
+                preserveAspectRatio="none"
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  cursor: tool === 'split' ? 'crosshair' : 'grab',
+                  touchAction: 'none',
+                  pointerEvents: 'all',
+                }}
+              >
+                <rect x={0} y={0} width={1} height={1} fill="transparent" />
+                {splitLine && (
+                  <line
+                    x1={splitLine.x1}
+                    y1={splitLine.y1}
+                    x2={splitLine.x2}
+                    y2={splitLine.y2}
+                    stroke="#ffffff"
+                    strokeWidth={0.004}
+                    strokeDasharray="0.01 0.008"
+                  />
+                )}
+              </svg>
+            </div>
+
+            {/* Controles de zoom */}
+            <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button aria-label="Acercar" onClick={() => zoomAt(1.5)} style={zoomBtn}>
+                <ZoomIn size={18} />
+              </button>
+              <button aria-label="Alejar" onClick={() => zoomAt(1 / 1.5)} style={zoomBtn}>
+                <ZoomOut size={18} />
+              </button>
+              <button aria-label="Ajustar" onClick={resetZoom} style={zoomBtn}>
+                <Maximize size={18} />
+              </button>
+            </div>
+            {view.scale > 1 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 8,
+                  bottom: 8,
+                  color: 'rgba(255,255,255,0.85)',
+                  fontSize: '0.72rem',
+                  background: 'rgba(0,0,0,0.55)',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '0.375rem',
+                  pointerEvents: 'none',
+                }}
+              >
+                Arrastrá para mover · pellizcá para zoom
+              </div>
+            )}
             {detecting && (
               <div
                 style={{
@@ -626,6 +805,7 @@ export function HoldHighlightEditor({
                   color: 'white',
                   fontSize: '0.85rem',
                   fontWeight: 600,
+                  pointerEvents: 'none',
                 }}
               >
                 Detectando presas…
@@ -633,6 +813,56 @@ export function HoldHighlightEditor({
             )}
           </div>
 
+          {/* Barra de confirmación de candidatas */}
+          {pending && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.625rem',
+                padding: '0.5rem 0.625rem',
+                background: 'rgba(134,59,255,0.12)',
+                border: '1px solid rgba(134,59,255,0.3)',
+                borderRadius: '0.5rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', flex: 1, minWidth: 150 }}>
+                {pendingCount === 0
+                  ? 'Sin candidatas.'
+                  : `${pendingCount} presa${pendingCount === 1 ? '' : 's'} candidata${pendingCount === 1 ? '' : 's'}: tocá las grises que sobren.`}
+              </span>
+              <button
+                onClick={confirmPending}
+                disabled={pendingCount === 0}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.375rem',
+                  padding: '0.5rem 1rem',
+                  background: pendingCount === 0 ? 'var(--color-bg-hover)' : 'var(--color-accent-primary)',
+                  color: pendingCount === 0 ? 'var(--color-text-muted)' : 'var(--color-text-inverse)',
+                  border: 'none', borderRadius: '0.5rem', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                }}
+              >
+                <Check size={16} /> Marcar {pendingCount}
+              </button>
+              <button
+                onClick={cancelPending}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.375rem',
+                  padding: '0.5rem 0.9rem',
+                  background: 'var(--color-bg-surface)',
+                  color: 'var(--color-text-secondary)',
+                  border: '1px solid var(--color-border-default)', borderRadius: '0.5rem',
+                  fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                }}
+              >
+                <X size={16} /> Descartar
+              </button>
+            </div>
+          )}
+
+          {/* Herramientas */}
           <div
             style={{
               display: 'flex',
@@ -651,23 +881,29 @@ export function HoldHighlightEditor({
                 flexWrap: 'wrap',
               }}
             >
-              <button onClick={() => selectTool('color')} style={{ ...toolBtn, ...(tool === 'color' ? toolBtnActive : {}) }}>
-                🎨 Color
+              <button
+                onClick={() => selectTool('add')}
+                disabled={!!pending}
+                style={{ ...toolBtn, ...(tool === 'add' && !pending ? toolBtnActive : {}), ...(pending ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+              >
+                <Plus size={13} /> Sumar/Quitar
               </button>
-              <button onClick={() => selectTool('erase')} style={{ ...toolBtn, ...(tool === 'erase' ? toolBtnActive : {}) }}>
-                Borrar
+              <button
+                onClick={() => selectTool('color')}
+                disabled={!!pending}
+                style={{ ...toolBtn, ...(tool === 'color' && !pending ? toolBtnActive : {}), ...(pending ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+              >
+                🎨 Por color
               </button>
-              <button onClick={() => selectTool('add')} style={{ ...toolBtn, ...(tool === 'add' ? toolBtnActive : {}) }}>
-                <Plus size={13} /> Agregar
-              </button>
-              <button onClick={() => selectTool('split')} style={{ ...toolBtn, ...(tool === 'split' ? toolBtnActive : {}) }}>
+              <button
+                onClick={() => selectTool('split')}
+                disabled={!!pending}
+                style={{ ...toolBtn, ...(tool === 'split' && !pending ? toolBtnActive : {}), ...(pending ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+              >
                 ✂️ Partir
               </button>
-              <button onClick={() => selectTool('shape')} style={{ ...toolBtn, ...(tool === 'shape' ? toolBtnActive : {}) }}>
-                ✏️ Ajustar
-              </button>
             </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
               <label
                 style={{
                   display: 'flex',
@@ -678,15 +914,13 @@ export function HoldHighlightEditor({
                 }}
               >
                 <span>
-                  {tool === 'color'
-                    ? 'Sensibilidad · toca una presa para iluminar todas las de su color'
-                    : tool === 'erase'
-                      ? 'toca una presa para borrarla entera'
-                      : tool === 'add'
-                        ? 'toca para agregar una presa del color elegido'
-                        : tool === 'split'
-                          ? 'arrastra la línea para partir la presa'
-                          : 'toca la presa y arrastra sus puntos'}
+                  {pending
+                    ? 'Tolerancia de detección de las candidatas'
+                    : tool === 'add'
+                      ? 'Tocá una presa: se suma · tocá una marcada: se quita'
+                      : tool === 'color'
+                        ? 'Tocá una presa para detectar todas las de su color'
+                        : 'Arrastrá la línea para partir la presa'}
                 </span>
                 <span>{sensitivity < 33 ? 'Estricta' : sensitivity < 66 ? 'Media' : 'Laxa'}</span>
               </label>
@@ -707,12 +941,11 @@ export function HoldHighlightEditor({
             </p>
           )}
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', margin: '0.375rem 0 0' }}>
-            <strong>🎨 Color</strong>: tocá una presa (ej. una blanca) y se iluminan todas las de su color con el
-            anillo del tono del problema. <strong>Borrar</strong> quita una presa puntual; <strong>Agregar</strong>{' '}
-            suma una presa del color de la paleta; <strong>✂️ Partir</strong> divide un área grande en dos (descarta el
-            pedazo chico); <strong>✏️ Ajustar</strong> edita el contorno arrastrando sus puntos, tocando un borde para
-            sumar un vértice o doble-tocando un punto para borrarlo. También podés elegir colores en la paleta y
-            usar <strong>Re-detectar</strong>. Cambiar foto o colores vuelve a detectar desde cero.
+            <strong>Sumar/Quitar</strong>: tocá una presa para agregarla y tocá una ya marcada para quitarla (usá el zoom
+            para precisión). <strong>🎨 Por color</strong>: detecta todas las de un color y te las muestra como candidatas
+            para confirmar. El bloque se ve siempre de{' '}
+            <strong>un solo color</strong> (el de su categoría), aunque las presas sean de varios colores.{' '}
+            <strong>✂️ Partir</strong> divide un área grande en dos.
           </p>
         </>
       )}

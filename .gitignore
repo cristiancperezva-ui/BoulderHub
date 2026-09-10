@@ -28,3 +28,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Spike de validación SAM (Fase 0): fotos reales de setters + debug local, no se versiona.
+# Los pesos ONNX que sí se necesitan para producción viven en functions/models/.
+scripts/spike/samples
+scripts/spike/out
+scripts/spike/models
+functions/node_modules

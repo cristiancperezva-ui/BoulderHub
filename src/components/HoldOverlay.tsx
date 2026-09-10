@@ -16,11 +16,13 @@ interface HoldOverlayProps {
   colors: string[];
   /** Color del anillo/contorno iluminado (ej. color de Categoría del bloque). */
   ringColor?: string;
+  /** Color UNIFORME del bloque: si se provee, todas las presas se pintan (relleno + contorno) de este tono. */
+  color?: string;
   /** Dibujar el relleno interior semitransparente (por defecto true). */
   fill?: boolean;
 }
 
-export function HoldOverlay({ regions, colors, ringColor, fill = true }: HoldOverlayProps) {
+export function HoldOverlay({ regions, colors, ringColor, color, fill = true }: HoldOverlayProps) {
   if (!regions || regions.length === 0) return null;
 
   return (
@@ -48,17 +50,19 @@ export function HoldOverlay({ regions, colors, ringColor, fill = true }: HoldOve
       </defs>
       {regions.map((r, i) => {
         const physical = colors[r.colorIndex] ?? '#ffffff';
-        const ring = ringColor ?? physical;
+        // Color uniforme del bloque: si se pasa `color`, todo (relleno + contorno)
+        // usa ese tono para que un bloque con presas de varios colores se vea como uno solo.
+        const c = color ?? ringColor ?? physical;
         const d = regionToPath(r);
         if (!d) return null;
         return (
           <path
             key={i}
             d={d}
-            fill={fill ? physical : 'none'}
-            fillOpacity={fill ? 0.32 : 0}
-            stroke={ring}
-            strokeWidth={0.0028}
+            fill={fill ? c : 'none'}
+            fillOpacity={fill ? (color ? 0.5 : 0.32) : 0}
+            stroke={c}
+            strokeWidth={color ? 0.004 : 0.0028}
             strokeOpacity={0.95}
             strokeLinejoin="round"
             style={{ filter: 'url(#hold-glow)' }}

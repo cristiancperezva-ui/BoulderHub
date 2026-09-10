@@ -308,27 +308,32 @@ export function RouteSetterCreateBlockView() {
             Foto del bloque *
           </label>
           {photo || existingPhotoUrl ? (
-            <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-              <img
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', margin: 0 }}>
+                  {isEditing ? 'Tocá ✕ y seleccioná una nueva foto para cambiarla' : 'Se convertirá a WebP automáticamente'}
+                </p>
+                <button
+                  onClick={() => { setPhoto(null); setExistingPhotoUrl(''); setHoldRegions([]); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0,
+                    background: 'var(--color-bg-base)', border: '1px solid var(--color-border-default)',
+                    borderRadius: '0.5rem', padding: '0.375rem 0.625rem',
+                    color: 'var(--color-text-secondary)', fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  <X size={16} /> Cambiar foto
+                </button>
+              </div>
+              {/* La foto ES el editor (sin preview duplicado) */}
+              <HoldHighlightEditor
                 src={photo?.preview || existingPhotoUrl}
-                alt="Preview"
-                loading="lazy"
-                style={{ width: '100%', maxHeight: 300, borderRadius: '0.5rem', objectFit: 'cover' }}
+                holdColors={holdColors}
+                value={holdRegions}
+                onChange={setHoldRegions}
+                color={selectedCat?.color}
+                onHoldColorsChange={setHoldColors}
               />
-              <button
-                onClick={() => { setPhoto(null); setExistingPhotoUrl(''); setHoldRegions([]); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                style={{
-                  position: 'absolute', top: 8, right: 8,
-                  background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
-                  width: 32, height: 32, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', cursor: 'pointer', color: 'white',
-                }}
-              >
-                <X size={18} />
-              </button>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                {isEditing ? 'Toca el botón ✕ y selecciona una nueva foto para cambiarla' : 'Se convertirá a WebP automáticamente'}
-              </p>
             </div>
           ) : (
             <div
@@ -497,17 +502,7 @@ export function RouteSetterCreateBlockView() {
           )}
         </div>
 
-        {/* Resaltado de presas */}
-        {(photo || existingPhotoUrl) && (
-          <HoldHighlightEditor
-            src={photo?.preview || existingPhotoUrl}
-            holdColors={holdColors}
-            value={holdRegions}
-            onChange={setHoldRegions}
-            ringColor={selectedCat?.color}
-            onHoldColorsChange={setHoldColors}
-          />
-        )}
+        {/* Resaltado de presas — ahora vive arriba, pegado a la foto (la foto es el editor) */}
 
         {/* Dificultad V */}
         <div>
